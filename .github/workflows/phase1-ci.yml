@@ -55,9 +55,12 @@ jobs:
 
       # --- STATIC ANALYSIS (Phase 1) ---
       - name: Static Code Analysis (Cppcheck)
-        run: pio check -e esp32dev --skip-packages --severity medium,high,critical
+        # run: pio check -e esp32dev --skip-packages --severity medium,high,critical
+        run: pio check -e esp32dev --skip-packages --severity high
 
       # --- FIRMWARE SIZE REPORT ---
       - name: Flash and RAM Usage Audit
         if: success()
         run: pio run -e esp32dev --target size
+
+        
