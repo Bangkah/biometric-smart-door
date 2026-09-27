@@ -1,8 +1,9 @@
 # Biometric Smart Key & Management System
-## Implementation Phase 1 — Hardware Prototype (Edge Only)
+## Implementation Phase 2 — Local Event System & Memory Buffer
 
-Firmware ESP32 untuk state machine kontrol akses biometrik, sesuai SRS
-Bab 20 Phase 1: **hanya perangkat edge**, tanpa backend/database/jaringan.
+Firmware ESP32 untuk state machine kontrol akses biometrik (Phase 1)
+ditambah sistem pencatatan log lokal persisten (Phase 2), sesuai SRS
+Bab 20: **hanya perangkat edge**, tanpa backend/database/jaringan.
 
 ---
 
@@ -12,12 +13,13 @@ Bab 20 Phase 1: **hanya perangkat edge**, tanpa backend/database/jaringan.
 biometric-smart-key/
 ├── platformio.ini
 ├── include/
-│   └── config.h            # Pin mapping, timing, build mode (mock/real)
+│   └── config.h              # Pin mapping, timing, build mode, konfigurasi log
 └── src/
-    ├── main.cpp             # setup()/loop(), watchdog timer
-    ├── state_machine.h/.cpp # State machine (SRS Bab 6)
-    ├── fingerprint.h/.cpp   # Abstraksi sensor sidik jari (mock + real)
-    └── actuator.h/.cpp      # Abstraksi relay/solenoid atau servo
+    ├── main.cpp               # setup()/loop(), watchdog, debugger Serial
+    ├── state_machine.h/.cpp   # State machine (SRS Bab 6) + trigger logEvent()
+    ├── fingerprint.h/.cpp     # Abstraksi sensor sidik jari (mock + real)
+    ├── actuator.h/.cpp        # Abstraksi relay/solenoid atau servo
+    └── event_logger.h/.cpp    # [Phase 2] Ring buffer log persisten (LittleFS)
 ```
 
 Kode ditulis untuk **PlatformIO** (disarankan) tetapi kompatibel dengan
@@ -198,17 +200,105 @@ enrollment bawaan library Adafruit, di luar cakupan firmware ini):
 
 ---
 
-## 8. Batasan Phase 1 (sesuai cakupan SRS)
+## 8. Phase 2 — Local Event System & Memory Buffer
 
-Fase ini **sengaja tidak mencakup**:
-- Komunikasi backend/API, autentikasi perangkat, sinkronisasi kredensial.
-- Persistent event buffer & upload log (masuk Phase 2/3 sesuai SRS Bab 20).
+### 8.1 Cara Kerja
+
+- Setiap event disimpan sebagai `EventRecord` berukuran **tetap** (41 byte)
+  ke dalam file ring buffer `EVENT_LOG_FILE` (`/events.dat`) di LittleFS,
+  berkapasitas `EVENT_LOG_MAX_ENTRIES` (default **50**, ubah di `config.h`
+  — bisa dinaikkan ke 100 sesuai kebutuhan).
+- Saat buffer penuh, entri **terlama otomatis tertimpa** (perilaku ring
+  buffer klasik) — sesuai permintaan SRS 5.6.
+- Setiap `logEvent()` langsung **ditulis + di-flush ke flash** (bukan
+  hanya disangga di RAM), sehingga log tidak hilang saat listrik padam
+  mendadak (SRS 13.2).
+- **Self-healing terhadap power-loss:** saat boot, `recoverStateFromFlash()`
+  memindai seluruh slot dan menentukan posisi tulis berikutnya dari
+  nomor urut (`sequence`) tertinggi yang valid — tidak bergantung pada
+  file metadata terpisah yang bisa basi/korup. Worst case bila listrik
+  padam persis di tengah satu penulisan: hanya 1 entri terakhir yang
+  berpotensi hilang, struktur ring buffer tetap konsisten.
+- Timestamp memakai `millis()` **relatif terhadap sesi boot saat ini**
+  (belum ada RTC/NTP di Phase 2 — itu ranah backend/Phase 3+). Field
+  `bootId` (tersimpan di NVS/Preferences, increment tiap boot)
+  membedakan log dari sesi boot yang berbeda agar timestamp tidak
+  disalahartikan sebagai waktu absolut yang sama.
+
+### 8.2 Tipe Event
+
+| EventType | Dipicu saat |
+|---|---|
+| `SYSTEM_BOOT` | Setiap kali firmware boot (state `BOOT`) |
+| `HARDWARE_CHECK_FAIL` | `HARDWARE_CHECK` gagal (sensor/aktuator tidak OK) |
+| `ACCESS_GRANTED` | Transisi ke `UNLOCKED` (sidik jari cocok) |
+| `ACCESS_DENIED` | Transisi ke `DENIED` (sidik jari tidak dikenali) |
+| `ERROR_SAFE_TRIGGERED` | Masuk ke state `ERROR_SAFE` |
+| `RECOVERY_ATTEMPT` | `ERROR_SAFE` mencoba kembali ke `HARDWARE_CHECK` |
+| `LOG_CLEARED` | Log dihapus manual via perintah debugger `c` |
+
+### 8.3 Perintah Debugger Serial (tambahan Phase 2)
+
+Selain `h` (uji watchdog, Phase 1), `t`/`m`/`x` (simulasi sidik jari):
+
+| Perintah | Fungsi |
+|---|---|
+| `l` + Enter | Menampilkan seluruh log tersimpan (urut terlama → terbaru) ke Serial Monitor |
+| `c` + Enter | Menghapus seluruh log (format ulang ring buffer), lalu mencatat satu event `LOG_CLEARED` |
+
+### 8.4 Skenario Pengujian Phase 2
+
+| # | Skenario | Langkah | Hasil yang diharapkan |
+|---|---|---|---|
+| 1 | Log boot tercatat | Power on / reset | Log real-time: `[EVENT #1] ... type=SYSTEM_BOOT`; ketik `l` → muncul di daftar |
+| 2 | Log akses granted | Di IDLE, kirim `t` lalu `m` | Setelah `UNLOCKED`, muncul `[EVENT #N] ... type=ACCESS_GRANTED` |
+| 3 | Log akses denied | Di IDLE, kirim `t` lalu `x` | Muncul `[EVENT #N] ... type=ACCESS_DENIED` |
+| 4 | Log error safe | Picu `ERROR_SAFE` (lihat bagian 5.4) | Muncul `ERROR_SAFE_TRIGGERED`, lalu `RECOVERY_ATTEMPT` setelah 3 detik |
+| 5 | **Ketahanan power-loss** | Lakukan beberapa akses (granted/denied), lalu cabut catu daya ESP32 **secara paksa** (jangan reset normal), nyalakan kembali | Ketik `l` setelah boot ulang → semua log sebelum pemadaman **masih ada**; `bootId` bertambah 1 menandai sesi baru |
+| 6 | Ring buffer wrap-around | Set sementara `EVENT_LOG_MAX_ENTRIES` ke angka kecil (mis. 5) di `config.h`, upload ulang, lakukan >5 kali akses | Ketik `l` → hanya 5 log **terbaru** yang tersisa, entri tertua otomatis hilang |
+| 7 | Hapus log | Ketik `c` lalu Enter | Log: "Log berhasil dihapus"; ketik `l` → hanya tersisa 1 entri `LOG_CLEARED` |
+
+### 8.5 Catatan Partisi Flash
+
+`platformio.ini` sudah diset `board_build.filesystem = littlefs` agar
+partisi data diformat sebagai LittleFS. Jika memakai **Arduino IDE**,
+pastikan memilih **Partition Scheme** yang menyediakan partisi
+SPIFFS/data (mis. "Default 4MB with spiffs") di menu Tools — LittleFS
+tetap dapat memakai partisi tersebut karena kode memanggil
+`LittleFS.begin(true)` (auto-format sesuai filesystem yang diminta).
+
+Ukuran ring buffer sangat kecil (41 byte × 50 entri ≈ 2 KB), sehingga
+konsumsi flash dan dampak wear-leveling dapat diabaikan untuk
+kebutuhan prototipe bangku.
+
+---
+
+## 9. Batasan Phase 1 & Phase 2 (sesuai cakupan SRS)
+
+Fase ini **sengaja tidak mencakup** (baru masuk Phase 3+ sesuai SRS Bab 20):
+- Komunikasi backend/API, autentikasi perangkat (Phase 3).
+- Sinkronisasi/upload event log yang tersimpan ke server saat jaringan
+  pulih — Phase 2 baru menyimpan & menampilkan log **secara lokal**;
+  pengiriman ke backend adalah tanggung jawab Phase 3 (Backend &
+  Device Communication).
+- Web Dashboard, audit log terpusat (Phase 4).
 - Remote unlock, command queue, enrollment jarak jauh (Phase 5/6).
 
 Fase ini **memenuhi** dari SRS:
 - FR-001 (verifikasi < 2 detik, via `FP_VERIFY_TIMEOUT_MS`)
 - FR-003 (penolakan sidik jari tak dikenal)
 - FR-004, FR-005 (unlock saat match, auto-lock setelah timeout)
-- FR-006 (operasi mandiri tanpa jaringan — memang belum ada jaringan sama sekali)
+- FR-006 (operasi mandiri tanpa jaringan)
+- FR-007 (struktur data event lokal setiap upaya akses — `EventRecord`)
+- FR-008 (penyanggaan event pada persistent storage lokal — ring buffer LittleFS)
 - State machine & fail-safe sesuai SRS Bab 6 dan 13.3–13.5
 - Watchdog sesuai SRS 5.5
+- Local Events & Persistent Buffer sesuai SRS 5.6 dan 13.2 (Network Failure:
+  log tetap aman tersimpan meski belum ada koneksi/backend untuk dikirim)
+
+> **Catatan integrasi Phase 3:** saat backend siap, FR-009 (sinkronisasi
+> event ke backend) dapat diimplementasikan dengan menambahkan fungsi
+> `syncPendingEvents()` di `event_logger.cpp` yang membaca entri berurutan
+> berdasarkan `sequence`, mengirimkannya ke endpoint `10.2 Events`, dan
+> menandai batas `sequence` terakhir yang berhasil disinkronkan (disimpan
+> terpisah di NVS) — tanpa perlu mengubah struktur ring buffer yang ada.
