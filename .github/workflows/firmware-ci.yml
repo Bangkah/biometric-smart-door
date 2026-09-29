@@ -30,6 +30,7 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
+
 # Batalkan run lama pada PR/branch yang sama jika ada push baru, supaya
 # tidak antre menjalankan build yang sudah usang.
 concurrency:
@@ -77,6 +78,7 @@ jobs:
     name: Build (${{ matrix.environment }})
     needs: unit-tests
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
@@ -91,8 +93,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Cache core PlatformIO + toolchain + library agar build berikutnya
-      # jauh lebih cepat (tidak download ulang toolchain ESP32 tiap run).
       - name: Cache PlatformIO core & libraries
         uses: actions/cache@v4
         with:
@@ -114,6 +114,7 @@ jobs:
           pio --version
           pio project config
 
+
       # QUALITY GATE UTAMA: build wajib sukses tanpa error 
       - name: Build firmware (${{ matrix.environment }})
         run: pio run -e ${{ matrix.environment }}
@@ -129,3 +130,4 @@ jobs:
       - name: Ringkasan ukuran firmware
         if: success()
         run: pio run -e ${{ matrix.environment }} --target size
+
