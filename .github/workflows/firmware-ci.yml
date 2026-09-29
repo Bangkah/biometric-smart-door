@@ -1,18 +1,5 @@
 name: Firmware CI (PlatformIO Build Gate)
 
-# ------------------------------------------------------------------
-# Quality gate untuk Biometric Smart Key & Management System.
-#
-# Dijalankan pada:
-#   - Setiap Pull Request yang menargetkan `main` (phase-1, phase-2, dst)
-#   - Setiap push ke branch berpola `phase-*` (feedback cepat sebelum PR dibuka)
-#   - Manual trigger (workflow_dispatch) untuk re-run jika perlu
-#
-# Tujuan: PR TIDAK dianggap lulus quality gate sebelum job `build`
-# ini hijau (compile sukses tanpa error) untuk environment esp32dev
-# yang didefinisikan di platformio.ini.
-# ------------------------------------------------------------------
-
 on:
   pull_request:
     branches:
@@ -22,8 +9,6 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
-# Batalkan run lama pada PR yang sama jika ada push baru, supaya
-# tidak antre menjalankan build yang sudah usang.
 concurrency:
   group: firmware-ci-${{ github.ref }}
   cancel-in-progress: true
@@ -32,7 +17,6 @@ jobs:
   build:
     name: Build (env:esp32dev)
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout kode
         uses: actions/checkout@v4
@@ -42,8 +26,6 @@ jobs:
         with:
           python-version: "3.11"
 
-      # Cache core PlatformIO + toolchain + library agar build berikutnya
-      # jauh lebih cepat (tidak download ulang toolchain ESP32 tiap run).
       - name: Cache PlatformIO core & libraries
         uses: actions/cache@v4
         with:
@@ -64,15 +46,9 @@ jobs:
           pio --version
           pio project config
 
-      # ---- QUALITY GATE UTAMA: build wajib sukses tanpa error ----
       - name: Build firmware (esp32dev)
         run: pio run -e esp32dev
 
-      # ---- Static analysis tambahan (non-blocking untuk saat ini) ----
-      # Diaktifkan sebagai laporan, belum men-gagalkan pipeline, supaya
-      # tidak memblokir Phase 2 hanya karena legacy warning. Ubah ke
-      # exit-code tegas (hapus "|| true") saat siap menegakkan aturan
-      # lebih ketat di fase-fase berikutnya.
       - name: Static check (cppcheck via PlatformIO)
         run: pio check -e esp32dev --skip-packages || true
 
