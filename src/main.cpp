@@ -1,6 +1,5 @@
 /*
  * main.cpp
- * ------------------------------------------------------------
  * Biometric Smart Key & Management System
  * Implementation Phase 1 (Hardware Prototype) +
  * Implementation Phase 2 (Local Event System & Memory Buffer) +
@@ -31,7 +30,6 @@
  *      'l' (lihat log), 'c' (hapus log), 'w' (status Wi-Fi/NTP/sync),
  *      's' (sync log ke backend sekarang).
  *   6. [Phase 3] Menjalankan network task terpisah.
- * ------------------------------------------------------------
  */
 
 #include <Arduino.h>
@@ -147,7 +145,7 @@ void setup() {
   Serial.println("[BUILD] MOCK_FINGERPRINT_MODE = OFF (sensor AS608/R307 aktif)");
 #endif
 
-  // ---------------- Watchdog Timer Setup (SRS 5.5) ----------------
+  // Watchdog Timer Setup (SRS 5.5) 
   // Catatan: signature esp_task_wdt_init() berbeda antara
   // Arduino-ESP32 core v2.x (ESP-IDF 4.x) dan core v3.x (ESP-IDF 5.x).
   // Blok di bawah menangani keduanya agar tetap compile di kedua versi.
@@ -169,13 +167,13 @@ void setup() {
   Serial.println(" detik.");
 #endif
 
-  // ---------------- Event Logger Init (SRS 5.6, Phase 2) ----------------
+  // Event Logger Init (SRS 5.6, Phase 2) 
   // WAJIB sebelum stateMachine.begin(), karena runBoot() langsung
   // mencatat event SYSTEM_BOOT.
   eventLogger.setTimeProvider(unixTimeProvider);  // Phase 3: timestamp UNIX riil bila NTP sinkron
   eventLogger.begin();
 
-  // ---------------- Network (Phase 3) ----------------
+  // Network (Phase 3) 
   // Dimulai SETELAH event logger siap, dan SEBELUM state machine agar upload
   // dapat berjalan paralel sejak awal. Jika WIFI_SSID kosong, semuanya idle
   // dan perangkat berperilaku persis seperti Phase 1/2.
@@ -195,7 +193,7 @@ void setup() {
   Serial.println("[DEBUG] Perintah: 'l'=lihat log, 'c'=hapus log, 'w'=status jaringan, "
                  "'s'=sync ke backend, 'h'=uji watchdog");
 
-  // ---------------- State Machine Boot ----------------
+  // State Machine Boot 
   stateMachine.begin();
 }
 

@@ -61,11 +61,9 @@ void StateMachine::update() {
   }
 }
 
-// ----------------------------------------------------------------
 // BOOT: titik masuk tunggal, baik dari cold start maupun dari
 // POWER RESTORED (SRS 13.5). Tidak melakukan apa pun selain
 // mencatat log dan langsung lanjut ke INITIALIZE.
-// ----------------------------------------------------------------
 void StateMachine::runBoot() {
   Serial.println("[BOOT] Memulai Biometric Smart Key Firmware");
 
@@ -76,11 +74,9 @@ void StateMachine::runBoot() {
   enterState(SystemState::INITIALIZE);
 }
 
-// ----------------------------------------------------------------
 // INITIALIZE: konfigurasi modul & pin (SRS 5.1). Aktuator SELALU
 // dipaksa ke posisi LOCKED di sini sebagai fail-safe pertama,
 // sebelum status hardware diverifikasi.
-// ----------------------------------------------------------------
 void StateMachine::runInitialize() {
   setIndicator(false, false, true); // biru = sedang inisialisasi
 
@@ -90,12 +86,10 @@ void StateMachine::runInitialize() {
   enterState(SystemState::HARDWARE_CHECK);
 }
 
-// ----------------------------------------------------------------
 // HARDWARE_CHECK: verifikasi sensor & aktuator sebelum sistem
 // diizinkan masuk ke mode operasional (SRS 5.1).
 //   PASS -> LOCKED -> IDLE
 //   FAIL -> ERROR_SAFE
-// ----------------------------------------------------------------
 void StateMachine::runHardwareCheck() {
   bool sensorOk   = fingerprintModule.healthCheck();
   bool actuatorOk = actuatorModule.healthCheck();
@@ -119,19 +113,15 @@ void StateMachine::runHardwareCheck() {
   }
 }
 
-// ----------------------------------------------------------------
 // LOCKED: kondisi aktuator terkunci secara fisik, transit singkat
 // menuju IDLE begitu dikonfirmasi terkunci (SRS 6.1).
-// ----------------------------------------------------------------
 void StateMachine::runLocked() {
   actuatorModule.lock();
   setIndicator(false, false, true); // biru = aman/terkunci
   enterState(SystemState::IDLE);
 }
 
-// ----------------------------------------------------------------
 // IDLE: menunggu sentuhan jari secara non-blocking (SRS 6.1).
-// ----------------------------------------------------------------
 void StateMachine::runIdle() {
   setIndicator(false, false, true);
 
@@ -140,11 +130,9 @@ void StateMachine::runIdle() {
   }
 }
 
-// ----------------------------------------------------------------
 // VERIFYING: proses pencocokan sidik jari (SRS 5.2, FR-001, FR-003).
 // verify() sendiri sudah dibatasi FP_VERIFY_TIMEOUT_MS agar tidak
 // memblokir loop() terlalu lama.
-// ----------------------------------------------------------------
 void StateMachine::runVerifying() {
   setIndicator(false, false, true);
   Serial.println("[VERIFYING] Mencocokkan sidik jari...");
@@ -173,10 +161,8 @@ void StateMachine::runVerifying() {
   }
 }
 
-// ----------------------------------------------------------------
 // UNLOCKED: aktuator terbuka, indikator hijau, auto-lock setelah
 // UNLOCK_DURATION_MS (SRS 5.3, FR-004, FR-005).
-// ----------------------------------------------------------------
 void StateMachine::runUnlocked() {
   // Aksi buka hanya dijalankan sekali saat baru masuk state ini.
   if (timeInState() < 20) { // window kecil untuk "baru saja masuk"
@@ -195,10 +181,8 @@ void StateMachine::runUnlocked() {
   }
 }
 
-// ----------------------------------------------------------------
 // DENIED: akses ditolak, indikator merah sesaat, lalu kembali IDLE
 // (SRS 6.1, FR-003).
-// ----------------------------------------------------------------
 void StateMachine::runDenied() {
   if (timeInState() < 20) {
     setIndicator(true, false, false); // merah
@@ -212,11 +196,9 @@ void StateMachine::runDenied() {
   }
 }
 
-// ----------------------------------------------------------------
 // ERROR_SAFE: pintu dipaksa terkunci secara mekanis, perintah buka
 // dilarang keras (SRS 6.3), lalu menjalankan siklus recovery
 // menuju HARDWARE_CHECK setelah jeda (SRS 5.4, 13.3, 13.7).
-// ----------------------------------------------------------------
 void StateMachine::runErrorSafe() {
   if (timeInState() < 20) {
     actuatorModule.lock(); // paksa terkunci, tanpa pengecualian
