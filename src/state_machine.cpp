@@ -2,6 +2,7 @@
 #include "config.h"
 #include "fingerprint.h"
 #include "actuator.h"
+#include "event_logger.h"
 
 StateMachine stateMachine;
 
@@ -60,21 +61,22 @@ void StateMachine::update() {
   }
 }
 
-// ----------------------------------------------------------------
 // BOOT: titik masuk tunggal, baik dari cold start maupun dari
 // POWER RESTORED (SRS 13.5). Tidak melakukan apa pun selain
 // mencatat log dan langsung lanjut ke INITIALIZE.
-// ----------------------------------------------------------------
 void StateMachine::runBoot() {
-  Serial.println("[BOOT] Memulai Biometric Smart Key Firmware (Phase 1 - Hardware Prototype)");
+  Serial.println("[BOOT] Memulai Biometric Smart Key Firmware");
+
+  // eventLogger.begin() sudah dipanggil lebih dulu di main.cpp::setup(),
+  // sebelum stateMachine.begin() dijalankan, sehingga aman dicatat di sini.
+  eventLogger.logEvent(EventType::SYSTEM_BOOT, -1, "Firmware boot");
+
   enterState(SystemState::INITIALIZE);
 }
 
-// ----------------------------------------------------------------
 // INITIALIZE: konfigurasi modul & pin (SRS 5.1). Aktuator SELALU
 // dipaksa ke posisi LOCKED di sini sebagai fail-safe pertama,
 // sebelum status hardware diverifikasi.
-// ----------------------------------------------------------------
 void StateMachine::runInitialize() {
   setIndicator(false, false, true); // biru = sedang inisialisasi
 
@@ -84,12 +86,10 @@ void StateMachine::runInitialize() {
   enterState(SystemState::HARDWARE_CHECK);
 }
 
-// ----------------------------------------------------------------
 // HARDWARE_CHECK: verifikasi sensor & aktuator sebelum sistem
 // diizinkan masuk ke mode operasional (SRS 5.1).
 //   PASS -> LOCKED -> IDLE
 //   FAIL -> ERROR_SAFE
-// ----------------------------------------------------------------
 void StateMachine::runHardwareCheck() {
   bool sensorOk   = fingerprintModule.healthCheck();
   bool actuatorOk = actuatorModule.healthCheck();
@@ -103,23 +103,25 @@ void StateMachine::runHardwareCheck() {
     Serial.print(", actuator=");
     Serial.print(actuatorOk ? "OK" : "FAIL");
     Serial.println(")");
+
+    char msg[28];
+    snprintf(msg, sizeof(msg), "sensor=%s actuator=%s",
+             sensorOk ? "OK" : "FAIL", actuatorOk ? "OK" : "FAIL");
+    eventLogger.logEvent(EventType::HARDWARE_CHECK_FAIL, -1, msg);
+
     enterState(SystemState::ERROR_SAFE);
   }
 }
 
-// ----------------------------------------------------------------
 // LOCKED: kondisi aktuator terkunci secara fisik, transit singkat
 // menuju IDLE begitu dikonfirmasi terkunci (SRS 6.1).
-// ----------------------------------------------------------------
 void StateMachine::runLocked() {
   actuatorModule.lock();
   setIndicator(false, false, true); // biru = aman/terkunci
   enterState(SystemState::IDLE);
 }
 
-// ----------------------------------------------------------------
 // IDLE: menunggu sentuhan jari secara non-blocking (SRS 6.1).
-// ----------------------------------------------------------------
 void StateMachine::runIdle() {
   setIndicator(false, false, true);
 
@@ -128,11 +130,9 @@ void StateMachine::runIdle() {
   }
 }
 
-// ----------------------------------------------------------------
 // VERIFYING: proses pencocokan sidik jari (SRS 5.2, FR-001, FR-003).
 // verify() sendiri sudah dibatasi FP_VERIFY_TIMEOUT_MS agar tidak
 // memblokir loop() terlalu lama.
-// ----------------------------------------------------------------
 void StateMachine::runVerifying() {
   setIndicator(false, false, true);
   Serial.println("[VERIFYING] Mencocokkan sidik jari...");
@@ -161,10 +161,8 @@ void StateMachine::runVerifying() {
   }
 }
 
-// ----------------------------------------------------------------
 // UNLOCKED: aktuator terbuka, indikator hijau, auto-lock setelah
 // UNLOCK_DURATION_MS (SRS 5.3, FR-004, FR-005).
-// ----------------------------------------------------------------
 void StateMachine::runUnlocked() {
   // Aksi buka hanya dijalankan sekali saat baru masuk state ini.
   if (timeInState() < 20) { // window kecil untuk "baru saja masuk"
@@ -172,6 +170,10 @@ void StateMachine::runUnlocked() {
     setIndicator(false, true, false); // hijau
     Serial.println("[UNLOCKED] Akses diberikan. Auto-lock dalam "
                     + String(UNLOCK_DURATION_MS / 1000) + " detik.");
+
+    eventLogger.logEvent(EventType::ACCESS_GRANTED,
+                          static_cast<int16_t>(fingerprintModule.lastMatchedSlotId()),
+                          "Fingerprint matched");
   }
 
   if (timeInState() >= UNLOCK_DURATION_MS) {
@@ -179,14 +181,14 @@ void StateMachine::runUnlocked() {
   }
 }
 
-// ----------------------------------------------------------------
 // DENIED: akses ditolak, indikator merah sesaat, lalu kembali IDLE
 // (SRS 6.1, FR-003).
-// ----------------------------------------------------------------
 void StateMachine::runDenied() {
   if (timeInState() < 20) {
     setIndicator(true, false, false); // merah
     Serial.println("[DENIED] Sidik jari tidak dikenali.");
+
+    eventLogger.logEvent(EventType::ACCESS_DENIED, -1, "Fingerprint not recognized");
   }
 
   if (timeInState() >= DENIED_DISPLAY_MS) {
@@ -194,17 +196,17 @@ void StateMachine::runDenied() {
   }
 }
 
-// ----------------------------------------------------------------
 // ERROR_SAFE: pintu dipaksa terkunci secara mekanis, perintah buka
 // dilarang keras (SRS 6.3), lalu menjalankan siklus recovery
 // menuju HARDWARE_CHECK setelah jeda (SRS 5.4, 13.3, 13.7).
-// ----------------------------------------------------------------
 void StateMachine::runErrorSafe() {
   if (timeInState() < 20) {
     actuatorModule.lock(); // paksa terkunci, tanpa pengecualian
     setIndicator(true, false, false);
     Serial.println("[ERROR_SAFE] Gangguan perangkat keras terdeteksi. "
                     "Pintu dipaksa terkunci. Memulai recovery...");
+
+    eventLogger.logEvent(EventType::ERROR_SAFE_TRIGGERED, -1, "Forced lock, anomaly detected");
   }
 
   // Blink merah sebagai indikator visual bahwa sistem dalam
@@ -214,6 +216,7 @@ void StateMachine::runErrorSafe() {
 
   if (timeInState() >= ERROR_RECOVERY_DELAY_MS) {
     Serial.println("[ERROR_SAFE] Mencoba kembali HARDWARE_CHECK...");
+    eventLogger.logEvent(EventType::RECOVERY_ATTEMPT, -1, "Retrying hardware check");
     enterState(SystemState::HARDWARE_CHECK);
   }
 }

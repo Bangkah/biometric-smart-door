@@ -68,3 +68,96 @@
 // WATCHDOG (SRS 5.5)
 // ============================================================
 #define WATCHDOG_TIMEOUT_S       8    // Reset otomatis jika loop() macet > 8 detik
+
+// ============================================================
+// LOCAL EVENT LOGGING / PERSISTENT BUFFER (SRS 5.6, Phase 2)
+// ============================================================
+// Ring buffer disimpan di LittleFS sebagai file berukuran tetap
+// (EVENT_LOG_MAX_ENTRIES * sizeof(EventRecord)) agar posisi setiap
+// slot dapat dihitung langsung (tidak perlu parsing), dan tahan
+// terhadap pemadaman listrik karena setiap logEvent() langsung
+// ditulis+di-flush ke flash (bukan disangga di RAM).
+#define EVENT_LOG_FILE            "/events.dat"
+#define EVENT_LOG_MAX_ENTRIES     50    // SRS: 50-100 log terakhir; ubah ke 100 bila perlu
+#define EVENT_LOG_NVS_NAMESPACE   "evtlog"
+#define EVENT_LOG_LOCK_TIMEOUT_MS 1000  // batas tunggu mutex ring buffer (loop <-> net task)
+
+// ============================================================
+// PHASE 3 — NETWORK, NTP & BACKEND EVENT UPLOAD
+// ============================================================
+#define FIRMWARE_VERSION          "0.3.0-phase3"
+
+// ---- Kredensial & endpoint (satu-satunya tempat secrets di-include) ----
+// include/secrets.h TIDAK di-commit (.gitignore). Template: secrets.h.example.
+// Jika secrets.h tidak ada (mis. GitHub Actions), nilai kosong dipakai:
+// firmware tetap compile dan berjalan OFFLINE-ONLY seperti Phase 1/2
+// (WIFI_SSID kosong => modul jaringan tidak pernah mencoba konek).
+#if __has_include("secrets.h")
+  #include "secrets.h"
+#endif
+#ifndef WIFI_SSID
+#define WIFI_SSID                 ""
+#endif
+#ifndef WIFI_PASSWORD
+#define WIFI_PASSWORD             ""
+#endif
+#ifndef DEVICE_API_TOKEN
+#define DEVICE_API_TOKEN          ""      // Bearer token unik per perangkat (SRS 12.3)
+#endif
+#ifndef DEVICE_ID
+#define DEVICE_ID                 "DOOR-01"
+#endif
+#ifndef BACKEND_EVENTS_ENDPOINT
+#define BACKEND_EVENTS_ENDPOINT   "https://your-backend.example.com/api/v1/events"
+#endif
+#ifndef BACKEND_ROOT_CA
+#define BACKEND_ROOT_CA           ""      // PEM root CA backend untuk verifikasi TLS
+#endif
+
+// Saklar global jaringan (0 = Phase 1/2 murni, tanpa task jaringan sama sekali).
+#define NETWORK_ENABLED           1
+
+// ---- Kebijakan transport (SRS NFR-001: seluruh komunikasi wajib TLS) ----
+// Default AMAN. Dilonggarkan HANYA lewat build env dev/bench (platformio.ini).
+#ifndef BACKEND_ALLOW_PLAIN_HTTP
+#define BACKEND_ALLOW_PLAIN_HTTP  0       // 1 = izinkan http:// (env esp32dev-bench)
+#endif
+#ifndef BACKEND_TLS_INSECURE
+#define BACKEND_TLS_INSECURE      0       // 1 = https TANPA verifikasi sertifikat (dev saja)
+#endif
+
+// ---- Wi-Fi Connection Manager ----
+#define WIFI_CONNECT_TIMEOUT_MS   15000UL // batas satu percobaan koneksi
+#define WIFI_BACKOFF_BASE_MS       2000UL // delay awal sebelum retry
+#define WIFI_BACKOFF_MAX_MS       60000UL // batas atas exponential backoff
+
+// ---- Network task (FreeRTOS) ----
+// SEMUA I/O jaringan (Wi-Fi, NTP, HTTP/TLS) berjalan di task ini, BUKAN di
+// loop(). Jadi state machine, verifikasi sidik jari, dan watchdog tidak
+// pernah ikut terblokir oleh jaringan lambat (SRS 2.2 Edge Autonomy, NFR-002).
+#define NET_TASK_STACK_BYTES      12288
+#define NET_TASK_PRIORITY         1
+#define NET_TASK_CORE             0       // loop() Arduino berjalan di core 1
+#define NET_TASK_TICK_MS          50
+
+// ---- NTP ----
+#define NTP_SERVER_1              "pool.ntp.org"
+#define NTP_SERVER_2              "time.google.com"
+#define NTP_SERVER_3              "time.cloudflare.com"
+#define NTP_GMT_OFFSET_SEC        (7 * 3600)  // WIB (UTC+7) — hanya memengaruhi TAMPILAN lokal;
+                                              // epoch yang disimpan & dikirim ke backend selalu UTC
+#define NTP_DAYLIGHT_OFFSET_SEC   0
+#define NTP_RETRY_INTERVAL_MS     30000UL
+#define MIN_VALID_UNIX_TIME       1735689600UL // 2025-01-01T00:00:00Z; di bawah ini = belum sinkron
+
+// ---- Backend upload (SRS 10.2, FR-009) ----
+#define HTTP_CONNECT_TIMEOUT_MS   5000UL
+#define HTTP_REQUEST_TIMEOUT_MS   8000UL
+#define SYNC_INTERVAL_MS          30000UL // auto-sync berkala saat ada event baru
+#define SYNC_BATCH_MAX_ENTRIES    10      // maksimum event per POST
+#define SYNC_RETRY_BASE_MS        5000UL  // backoff eksponensial saat upload gagal
+#define SYNC_RETRY_MAX_MS         300000UL
+// Tunda upload sampai NTP sinkron: event sesi ini bisa diberi timestamp
+// UNIX (estimasi) dan verifikasi sertifikat TLS memakai waktu yang benar.
+#define SYNC_REQUIRE_TIME         1
+#define API_CLIENT_NVS_NAMESPACE  "apiclient"
