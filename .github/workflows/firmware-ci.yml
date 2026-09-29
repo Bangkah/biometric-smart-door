@@ -30,6 +30,7 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
+
 # Batalkan run lama pada PR/branch yang sama jika ada push baru, supaya
 # tidak antre menjalankan build yang sudah usang.
 concurrency:
@@ -77,6 +78,7 @@ jobs:
     name: Build (${{ matrix.environment }})
     needs: unit-tests
     runs-on: ubuntu-latest
+
     strategy:
       fail-fast: false
       matrix:
@@ -129,3 +131,4 @@ jobs:
       - name: Ringkasan ukuran firmware
         if: success()
         run: pio run -e ${{ matrix.environment }} --target size
+
