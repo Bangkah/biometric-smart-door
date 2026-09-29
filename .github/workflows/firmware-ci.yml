@@ -42,20 +42,16 @@ jobs:
           pip install --upgrade platformio
 
       - name: Tampilkan versi & environment terdeteksi
-        working-directory: biometric-smart-key-2
         run: |
           pio --version
           pio project config
 
       - name: Build firmware (esp32dev)
-        working-directory: biometric-smart-key-2
         run: pio run -e esp32dev
 
       - name: Static check (cppcheck via PlatformIO)
-        working-directory: biometric-smart-key-2
         run: pio check -e esp32dev --skip-packages || true
 
       - name: Ringkasan ukuran firmware
         if: success()
-        working-directory: biometric-smart-key-2
         run: pio run -e esp32dev --target size
