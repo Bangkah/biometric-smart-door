@@ -1,4 +1,25 @@
-name: Firmware CI (PlatformIO Build Gate)
+
+name: Firmware CI (PlatformIO Quality Gate)
+
+# Quality gate untuk Biometric Smart Key & Management System.
+#
+# Dijalankan pada:
+#   - Setiap Pull Request yang menargetkan `main` (phase-1, phase-2, dst)
+#   - Setiap push ke branch berpola `phase-*` (feedback cepat sebelum PR dibuka)
+#   - Manual trigger (workflow_dispatch) untuk re-run jika perlu
+#
+# Dua lapis gate, berurutan (build menunggu unit-tests lulus -> fail-fast,
+# umpan balik logika salah didapat dalam hitungan detik, bukan menunggu
+# toolchain ESP32 selesai di-download/di-compile terlebih dahulu):
+#   1. unit-tests : `pio test -e native` — backoff.h, time_estimate.h, dan
+#      event_logger.cpp (kode PRODUKSI, bukan tiruan) diuji sebagai
+#      PERILAKU nyata di host (ring buffer, ketahanan power-loss, epoch).
+#   2. build       : `pio run` untuk env:esp32dev DAN env:esp32dev-bench
+#      (matrix) — memastikan firmware benar-benar mengompilasi untuk
+#      target ESP32 sungguhan di kedua konfigurasi transport (TLS wajib
+#      vs bench HTTP lokal).
+#
+# PR TIDAK dianggap lulus quality gate sebelum KEDUA job ini hijau.
 
 on:
   pull_request:
@@ -9,14 +30,18 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
+# Batalkan run lama pada PR/branch yang sama jika ada push baru, supaya
+# tidak antre menjalankan build yang sudah usang.
 concurrency:
   group: firmware-ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build (env:esp32dev)
+  # LAPIS 1: Unit test murni (host, tanpa ESP32) — jalan duluan & cepat.
+  unit-tests:
+    name: Unit tests (env:native)
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout kode
         uses: actions/checkout@v4
@@ -26,15 +51,58 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Cache PlatformIO core
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: ${{ runner.os }}-pio-native-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-native-
+
+      - name: Install PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      # QUALITY GATE: seluruh test suite di test/ wajib lulus 
+      # Mencakup test_backoff, test_time_estimate, dan test_event_logger
+      # (lihat platformio.ini [env:native] untuk cakupan & rasionalnya).
+      - name: Jalankan unit test (native)
+        run: pio test -e native --verbose
+
+  # LAPIS 2: Build firmware ESP32 sungguhan — hanya jalan jika unit-tests lulus.
+  build:
+    name: Build (${{ matrix.environment }})
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [esp32dev, esp32dev-bench]
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Cache core PlatformIO + toolchain + library agar build berikutnya
+      # jauh lebih cepat (tidak download ulang toolchain ESP32 tiap run).
       - name: Cache PlatformIO core & libraries
         uses: actions/cache@v4
         with:
           path: |
             ~/.platformio
             ~/.cache/pip
-          key: ${{ runner.os }}-pio-${{ hashFiles('**/platformio.ini') }}
+          key: ${{ runner.os }}-pio-${{ matrix.environment }}-${{ hashFiles('**/platformio.ini') }}
           restore-keys: |
-            ${{ runner.os }}-pio-
+            ${{ runner.os }}-pio-${{ matrix.environment }}-
+
 
       - name: Install PlatformIO Core
         run: |
@@ -46,12 +114,18 @@ jobs:
           pio --version
           pio project config
 
-      - name: Build firmware (esp32dev)
-        run: pio run -e esp32dev
+      # QUALITY GATE UTAMA: build wajib sukses tanpa error 
+      - name: Build firmware (${{ matrix.environment }})
+        run: pio run -e ${{ matrix.environment }}
 
+      # Static analysis tambahan (non-blocking untuk saat ini)
+      # Diaktifkan sebagai laporan, belum men-gagalkan pipeline, supaya
+      # tidak memblokir Phase 3 hanya karena legacy warning. Ubah ke
+      # exit-code tegas (hapus "|| true") saat siap menegakkan aturan
+      # lebih ketat di fase-fase berikutnya.
       - name: Static check (cppcheck via PlatformIO)
-        run: pio check -e esp32dev --skip-packages || true
+        run: pio check -e ${{ matrix.environment }} --skip-packages || true
 
       - name: Ringkasan ukuran firmware
         if: success()
-        run: pio run -e esp32dev --target size
+        run: pio run -e ${{ matrix.environment }} --target size

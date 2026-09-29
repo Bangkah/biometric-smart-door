@@ -1,0 +1,13 @@
+# PlatformIO
+.pio/
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+
+# Kredensial lokal — JANGAN PERNAH di-commit
+include/secrets.h
+
+# Python cache (tools/)
+__pycache__/
+*.pyc
