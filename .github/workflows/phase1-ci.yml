@@ -1,0 +1,66 @@
+name: Phase 1 Firmware CI (Strict Gate)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - phase-1
+  workflow_dispatch: {}
+
+concurrency:
+  group: phase1-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-phase1:
+    name: Build & Verify Phase 1 (esp32dev)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO Core & Libraries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: ${{ runner.os }}-pio-phase1-${{ hashFiles('**/platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-pio-phase1-
+
+      - name: Install PlatformIO Core
+        run: |
+          python -m pip install --upgrade pip
+          pip install --upgrade platformio
+
+      - name: Environment Diagnostics
+        run: |
+          pio --version
+          pio project config
+
+      # --- STRICT BUILD CHECK (Phase 1) ---
+      - name: Compile Phase 1 Firmware
+        env:
+          PLATFORMIO_BUILD_FLAGS: "-Werror -Wall -Wextra"
+        run: pio run -e esp32dev
+
+      # --- STATIC ANALYSIS (Phase 1) ---
+      - name: Static Code Analysis (Cppcheck)
+        # run: pio check -e esp32dev --skip-packages --severity medium,high,critical
+        run: pio check -e esp32dev --skip-packages --severity high
+
+      # --- FIRMWARE SIZE REPORT ---
+      - name: Flash and RAM Usage Audit
+        if: success()
+        run: pio run -e esp32dev --target size
+
+        

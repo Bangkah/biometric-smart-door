@@ -1,3 +1,4 @@
+
 # Biometric Smart Key & Management System
 ## Implementation Phase 2 — Local Event System & Memory Buffer
 
@@ -5,9 +6,19 @@ Firmware ESP32 untuk state machine kontrol akses biometrik (Phase 1)
 ditambah sistem pencatatan log lokal persisten (Phase 2), sesuai SRS
 Bab 20: **hanya perangkat edge**, tanpa backend/database/jaringan.
 
----
+> Spesifikasi lengkap ada di [`docs/srs.md`](docs/srs.md).
 
-## 1. Struktur Proyek
+## Fitur Utama
+
+- Verifikasi sidik jari lokal (< 2 detik), tanpa bergantung pada koneksi jaringan
+- Web dashboard untuk manajemen pengguna, perangkat, dan enrollment
+- Audit trail lengkap untuk seluruh akses & perintah administratif
+- Remote unlock dengan proteksi replay & eksekusi idempotent (`command_id`, `issued_at`, `expires_at`)
+- Persistent event buffer di perangkat — log tetap tersimpan saat offline dan disinkronkan otomatis saat online kembali
+- Fail-safe: kegagalan sistem apa pun membuat pintu kembali ke kondisi **terkunci**
+- Privacy by design — data biometrik mentah tidak pernah dikirim/disimpan di server
+
+## Arsitektur
 
 ```
 biometric-smart-key/
@@ -20,113 +31,66 @@ biometric-smart-key/
     ├── fingerprint.h/.cpp     # Abstraksi sensor sidik jari (mock + real)
     ├── actuator.h/.cpp        # Abstraksi relay/solenoid atau servo
     └── event_logger.h/.cpp    # [Phase 2] Ring buffer log persisten (LittleFS)
+
 ```
 
-Kode ditulis untuk **PlatformIO** (disarankan) tetapi kompatibel dengan
-Arduino IDE — lihat bagian 3.2.
+- **Edge Device** — ESP32 + sensor sidik jari (AS608/R307) + solenoid/servo lock, menjalankan state machine (`BOOT → INITIALIZE → HARDWARE_CHECK → LOCKED/IDLE → VERIFYING → UNLOCKED/DENIED`, dengan `ERROR_SAFE` untuk kegagalan).
+- **Backend** — REST API untuk autentikasi perangkat & admin, sinkronisasi kredensial, penerimaan log, dan antrean command.
+- **Database** — Relasional, menyimpan `users`, `fingerprint_credentials`, `devices`, `access_logs`, `commands`.
+- **Web Dashboard** — Panel admin: login, ringkasan status, manajemen user/device, enrollment, access log, remote unlock.
 
----
+## Tech Stack
 
-## 2. Kebutuhan Perangkat Keras
-
-| Komponen | Catatan |
+| Layer | Teknologi |
 |---|---|
-| ESP32 DevKit (mis. ESP32-WROOM-32) | Wi-Fi tidak dipakai di Phase 1, tapi chip tetap ESP32 |
-| Sensor sidik jari AS608 / R307 | **Opsional untuk Phase 1 awal** — lihat mode mock di bagian 5 |
-| Relay module 1 channel + Solenoid Door Lock 12V, **atau** Servo (SG90) untuk prototipe meja | Pilih salah satu via `ACTUATOR_TYPE_SERVO` di `config.h` |
-| 3x LED (Merah/Hijau/Biru) + resistor 220Ω, atau 1x LED RGB | Indikator status |
-| Push button + resistor (atau pakai `INPUT_PULLUP` langsung ke GND) | Simulasi sentuhan jari saat sensor belum terpasang |
-| Power supply terpisah untuk aktuator (12V untuk solenoid) | Jangan menyuplai solenoid dari 5V ESP32 |
+| Firmware | ESP32 (Arduino IDE / ESP-IDF), sensor UART (AS608/R307) |
+| Backend | Node.js (Express.js / TypeScript), Prisma ORM |
+| Database | PostgreSQL |
+| Frontend | React.js (Vite, Tailwind CSS) |
+| Simulasi & Testing | Mock Mode (Serial Monitor / Wokwi) & GitHub Actions CI/CD |
+| Deployment | Docker / cloud instance, HTTPS |
 
-### 2.1 Pin Mapping (default, ubah di `include/config.h`)
+## Keamanan
 
-| Fungsi | Pin ESP32 |
-|---|---|
-| Fingerprint RX (ESP32 RX2 ← Sensor TX) | GPIO16 |
-| Fingerprint TX (ESP32 TX2 → Sensor RX) | GPIO17 |
-| Relay / Solenoid | GPIO26 |
-| Servo (jika dipakai) | GPIO27 |
-| LED Merah | GPIO25 |
-| LED Hijau | GPIO33 |
-| LED Biru | GPIO32 |
-| Push button simulasi jari | GPIO4 (ke GND, `INPUT_PULLUP`) |
+- Seluruh komunikasi edge ⇄ backend ⇄ dashboard menggunakan **TLS/HTTPS**
+- Password admin di-hash dengan **Bcrypt/Argon2**
+- Setiap perangkat memiliki **token identitas unik**
+- Command remote unlock wajib **idempotent** dan divalidasi masa berlakunya (`expires_at`)
+- Data biometrik mentah **tidak pernah** meninggalkan perangkat edge
 
----
+## Roadmap & Status Implementasi
 
-## 3. Build & Upload
+Proyek dikembangkan bertahap dengan *strict CI/CD quality gate* (GitHub Actions dengan `-Werror` dan analisis statis Cppcheck), meskipun saat ini diuji melalui simulasi perangkat lunak (*mock mode*).
 
-### 3.1 PlatformIO (disarankan)
+| # | Fase | Status |
+|---|---|---|
+| 1 | Hardware Prototype & State Machine | ✅ Selesai |
+| 2 | Local Access Control & Persistent Event Buffer | ✅ Selesai |
+| 3 | Network & Backend Integration | ⏭️ Berikutnya |
+| 4 | Web Dashboard | ⏳ Direncanakan |
+| 5 | Enrollment & Credential Management | ⏳ Direncanakan |
+| 6 | Remote Unlock | ⏳ Direncanakan |
+| 7 | Security, Testing & Final Validation | ⏳ Direncanakan |
 
-```bash
-# Install PlatformIO CLI jika belum ada
-pip install platformio
+### [Phase 1](https://github.com/Bangkah/biometric-smart-door/tree/phase-1) — Hardware Prototype & State Machine
 
-# Dari dalam folder biometric-smart-key/
-pio run                 # compile
-pio run --target upload # flash ke ESP32
-pio device monitor -b 115200   # buka Serial Monitor
-```
+- *State machine* non-blocking (`BOOT`, `INITIALIZE`, `HARDWARE_CHECK`, `LOCKED`, `IDLE`, `VERIFYING`, `UNLOCKED`, `DENIED`, `ERROR_SAFE`).
+- Modul abstrak sensor sidik jari dengan *Mock Mode* penuh, dapat diuji tanpa perangkat keras fisik via Serial Monitor (`t` / `m` / `x`).
+- Watchdog Timer (8 detik) untuk pemulihan mandiri.
+- CI/CD: `.github/workflows/phase1-ci.yml`.
 
-### 3.2 Arduino IDE (alternatif)
+### [Phase 2](https://github.com/Bangkah/biometric-smart-door/tree/phase-2) — Local Access Control & Persistent Event Buffer
 
-1. Buat sketch baru bernama `biometric-smart-key`, lalu ganti file `.ino`-nya
-   dengan isi `src/main.cpp` (rename jadi `biometric-smart-key.ino`).
-2. Salin `state_machine.h/.cpp`, `fingerprint.h/.cpp`, `actuator.h/.cpp`,
-   dan `config.h` ke folder sketch yang sama (Arduino IDE otomatis
-   meng-compile semua `.h`/`.cpp` dalam satu folder).
-3. Install board **ESP32** via Boards Manager (Espressif Systems).
-4. Jika `MOCK_FINGERPRINT_MODE` dinonaktifkan, install library
-   **Adafruit Fingerprint Sensor Library** via Library Manager.
-5. Pilih board ESP32 Dev Module, port yang sesuai, lalu Upload.
+- Log lokal persisten memakai **LittleFS** berbasis *ring buffer* (50 entri).
+- Tahan pemadaman listrik (*power-loss resilience*) dengan *self-healing sequence recovery* saat boot.
+- Debugger Serial interaktif untuk manajemen log (`l` lihat log, `c` hapus log).
+- CI/CD: terverifikasi otomatis via pipeline CI.
 
----
+### Phase 3 — Network & Backend Integration *(berikutnya)*
 
-## 4. Wiring Ringkas
+- Wi-Fi auto-reconnect, sinkronisasi waktu via NTP, dan sinkronisasi *payload* event log ke backend.
 
-```
-ESP32                         AS608/R307 (opsional, Phase 1 awal boleh skip)
-  GPIO16 (RX2) ------------------ TX
-  GPIO17 (TX2) ------------------ RX
-  5V/3V3 --------------------- VCC (cek datasheet modul)
-  GND ------------------------ GND
-
-ESP32                         Relay Module -> Solenoid 12V
-  GPIO26 --------------------- IN
-  5V -------------------------- VCC (relay)
-  GND ------------------------- GND
-                                Solenoid disuplai dari PSU 12V terpisah,
-                                melalui kontak NO/COM relay.
-
-ESP32                         LED Indikator
-  GPIO25 --[220Ω]------------- Anoda LED Merah -> Katoda -> GND
-  GPIO33 --[220Ω]------------- Anoda LED Hijau -> Katoda -> GND
-  GPIO32 --[220Ω]------------- Anoda LED Biru  -> Katoda -> GND
-
-ESP32                         Push Button (simulasi sentuhan jari)
-  GPIO4  ---------------------- salah satu kaki tombol
-  GND    ---------------------- kaki tombol lainnya
-  (pin dikonfigurasi INPUT_PULLUP, tidak perlu resistor eksternal)
-```
-
-**PENTING (grounding, SRS 4.5):** GND ESP32, relay module, dan PSU 12V
-untuk solenoid harus memiliki referensi ground yang sama (common ground)
-apabila tidak menggunakan isolasi galvanis (opto-isolator pada relay).
-
----
-
-## 5. Bench Testing TANPA Sensor Fisik (Mock Mode)
-
-Ini memungkinkan pengujian **seluruh state machine** sebelum sensor
-AS608/R307 tersedia secara fisik — sesuai permintaan "Simulation
-Requirements" SRS Bab 18.
-
-### 5.1 Aktifkan mode mock
-
-Di `include/config.h`, pastikan baris berikut **aktif** (default sudah aktif):
-
-```cpp
-#define MOCK_FINGERPRINT_MODE 1
-```
+## Lisensi
 
 ### 5.2 Dua cara simulasi
 
