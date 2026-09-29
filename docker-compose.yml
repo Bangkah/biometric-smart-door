@@ -1,0 +1,16 @@
+services:
+  firmware-test:
+    build: .
+    container_name: biometric-smart-door-test
+    volumes:
+      - .:/project
+    command: pio test -e native
+
+  mock-backend:
+    build: .
+    container_name: biometric-smart-door-mock-backend
+    volumes:
+      - .:/project
+    ports:
+      - "8000:8000"
+    command: python tools/mock_backend.py --port 8000 --token dummy-token-123
