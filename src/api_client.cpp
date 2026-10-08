@@ -4,7 +4,10 @@
 #include "network_manager.h"
 #include "time_sync.h"
 #include "backoff.h"
+<<<<<<< HEAD
 #include "url_utils.h"
+=======
+>>>>>>> origin/main
 
 #include <Preferences.h>
 #include <HTTPClient.h>
@@ -34,8 +37,12 @@ const char* syncResultToString(SyncResult result) {
 // ------------------------------------------------------------
 void ApiClient::begin() {
   _enabled = false;
+<<<<<<< HEAD
   _heartbeatEnabled = false;
   _taskTickAt = millis();
+=======
+  _heartbeatAt = millis();
+>>>>>>> origin/main
 
   if (!NETWORK_ENABLED || strlen(WIFI_SSID) == 0) {
     Serial.println("[API_CLIENT] Jaringan tidak dikonfigurasi -> upload dinonaktifkan (offline-only).");
@@ -69,6 +76,7 @@ void ApiClient::begin() {
     Serial.println("[API_CLIENT] PERINGATAN: TLS TANPA verifikasi sertifikat (BACKEND_TLS_INSECURE) — dev saja!");
   }
 
+<<<<<<< HEAD
   // Device Heartbeat (SRS 8.2/10.3, FR-015): endpoint diturunkan dari
   // BACKEND_EVENTS_ENDPOINT supaya secrets.h Phase 3 tetap kompatibel tanpa
   // field tambahan. Kegagalan menurunkan URL TIDAK menggagalkan sync event
@@ -84,6 +92,8 @@ void ApiClient::begin() {
                    "sync event tetap berjalan normal.");
   }
 
+=======
+>>>>>>> origin/main
   loadState();
   _enabled = true;
   Serial.printf("[API_CLIENT] Siap. epoch=%lu, lastSyncedSequence=%lu, interval=%lu s, batch=%d.\n",
@@ -111,6 +121,7 @@ void ApiClient::saveState() {
 // update(): dipanggil ~tiap NET_TASK_TICK_MS oleh network task.
 // ------------------------------------------------------------
 void ApiClient::update() {
+<<<<<<< HEAD
   _taskTickAt = millis();
   unsigned long now = millis();
 
@@ -122,6 +133,9 @@ void ApiClient::update() {
   if (_enabled && networkManager.isConnected()) {
     sendHeartbeatIfDue(now);
   }
+=======
+  _heartbeatAt = millis();
+>>>>>>> origin/main
 
   if (!_enabled) {
     if (_manualRequest) {
@@ -132,6 +146,10 @@ void ApiClient::update() {
   }
 
   bool manual = _manualRequest;
+<<<<<<< HEAD
+=======
+  unsigned long now = millis();
+>>>>>>> origin/main
 
   // Belum waktunya (dan tidak diminta manual)? Keluar tanpa menyentuh apa pun.
   if (!manual && static_cast<long>(now - _nextAttemptAt) < 0) return;
@@ -287,7 +305,11 @@ void ApiClient::syncOnce(bool manual) {
                 (unsigned long)n, (unsigned long)firstSeq, (unsigned long)lastSeq, (unsigned)len);
 
   String errInfo;
+<<<<<<< HEAD
   int code = httpPost(BACKEND_EVENTS_ENDPOINT, reinterpret_cast<const uint8_t*>(payload), len, errInfo);
+=======
+  int code = httpPost(reinterpret_cast<const uint8_t*>(payload), len, errInfo);
+>>>>>>> origin/main
   free(payload);
 
   now = millis();
@@ -320,11 +342,18 @@ void ApiClient::syncOnce(bool manual) {
 }
 
 // ------------------------------------------------------------
+<<<<<<< HEAD
 // httpPost(): satu request POST ke `url` manapun (events ATAU heartbeat,
 // keduanya memakai auth Bearer+X-Device-Id yang sama). Semua tahap
 // dibatasi timeout sehingga network task tidak bisa menggantung tanpa batas.
 // ------------------------------------------------------------
 int ApiClient::httpPost(const String& url, const uint8_t* body, size_t len, String &errInfo) {
+=======
+// httpPost(): satu request. Semua tahap dibatasi timeout sehingga network
+// task tidak bisa menggantung tanpa batas.
+// ------------------------------------------------------------
+int ApiClient::httpPost(const uint8_t* body, size_t len, String &errInfo) {
+>>>>>>> origin/main
   WiFiClientSecure secureClient;
   WiFiClient plainClient;
   HTTPClient http;
@@ -340,12 +369,21 @@ int ApiClient::httpPost(const String& url, const uint8_t* body, size_t len, Stri
     } else {
       secureClient.setInsecure();  // hanya tercapai bila BACKEND_TLS_INSECURE=1 (divalidasi di begin())
     }
+<<<<<<< HEAD
     ok = http.begin(secureClient, url);
   } else {
     ok = http.begin(plainClient, url);
   }
   if (!ok) {
     errInfo = "http.begin() gagal — periksa URL: " + url;
+=======
+    ok = http.begin(secureClient, BACKEND_EVENTS_ENDPOINT);
+  } else {
+    ok = http.begin(plainClient, BACKEND_EVENTS_ENDPOINT);
+  }
+  if (!ok) {
+    errInfo = "http.begin() gagal — periksa BACKEND_EVENTS_ENDPOINT";
+>>>>>>> origin/main
     return -1000;
   }
 
@@ -366,6 +404,7 @@ int ApiClient::httpPost(const String& url, const uint8_t* body, size_t len, Stri
 }
 
 // ------------------------------------------------------------
+<<<<<<< HEAD
 // sendHeartbeatIfDue(): SRS 8.2/10.3, FR-015. Murni periodik — TIDAK
 // bergantung pada ada/tidaknya event untuk disinkron, TIDAK menunggu NTP,
 // dan kegagalannya TIDAK menggunakan backoff eksponensial (supaya device
@@ -409,6 +448,8 @@ void ApiClient::sendHeartbeatIfDue(unsigned long now) {
 }
 
 // ------------------------------------------------------------
+=======
+>>>>>>> origin/main
 // printStatus(): perintah debugger 'w' (bagian sync). Token tidak dicetak.
 // ------------------------------------------------------------
 void ApiClient::printStatus() const {
@@ -438,6 +479,7 @@ void ApiClient::printStatus() const {
     long wait = static_cast<long>(_nextAttemptAt - millis());
     Serial.printf("Gagal beruntun: %u, retry berikutnya ~%ld s\n", (unsigned)_failCount, wait > 0 ? wait / 1000L : 0L);
   }
+<<<<<<< HEAD
 
   Serial.println("---------- DEVICE HEARTBEAT ----------");
   if (!_heartbeatEnabled) {
@@ -455,4 +497,7 @@ void ApiClient::printStatus() const {
   }
 
   Serial.printf("Network task: tick terakhir %lu ms lalu\n", millis() - _taskTickAt);
+=======
+  Serial.printf("Network task: tick terakhir %lu ms lalu\n", millis() - _heartbeatAt);
+>>>>>>> origin/main
 }

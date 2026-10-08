@@ -161,6 +161,7 @@
 // UNIX (estimasi) dan verifikasi sertifikat TLS memakai waktu yang benar.
 #define SYNC_REQUIRE_TIME         1
 #define API_CLIENT_NVS_NAMESPACE  "apiclient"
+<<<<<<< HEAD
 
 // ---- Device Heartbeat (SRS 8.2/10.3, FR-015) ----
 // SENGAJA konstanta terpisah dari SYNC_INTERVAL_MS: heartbeat adalah
@@ -202,3 +203,5 @@
 #ifndef DEVICE_HMAC_SECRET
 #define DEVICE_HMAC_SECRET ""   // dari secrets.h; kosong = command client nonaktif (fail-closed)
 #endif
+=======
+>>>>>>> origin/main

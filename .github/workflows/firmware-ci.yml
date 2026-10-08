@@ -1,6 +1,12 @@
+<<<<<<< HEAD
 name: Quality Gate (Firmware + Backend)
 
 # ------------------------------------------------------------------
+=======
+
+name: Firmware CI (PlatformIO Quality Gate)
+
+>>>>>>> origin/main
 # Quality gate untuk Biometric Smart Key & Management System.
 #
 # Dijalankan pada:
@@ -8,6 +14,7 @@ name: Quality Gate (Firmware + Backend)
 #   - Setiap push ke branch berpola `phase-*` (feedback cepat sebelum PR dibuka)
 #   - Manual trigger (workflow_dispatch) untuk re-run jika perlu
 #
+<<<<<<< HEAD
 # Tiga lapis gate. Lapis 1 (cepat, tanpa toolchain ESP32/dependensi berat)
 # jalan duluan secara paralel; lapis 2 (build ESP32 sungguhan, lambat)
 # baru jalan setelah KEDUANYA di lapis 1 hijau — fail-fast, umpan balik
@@ -36,6 +43,20 @@ name: Quality Gate (Firmware + Backend)
 #
 # PR TIDAK dianggap lulus quality gate sebelum SEMUA job di bawah hijau.
 # ------------------------------------------------------------------
+=======
+# Dua lapis gate, berurutan (build menunggu unit-tests lulus -> fail-fast,
+# umpan balik logika salah didapat dalam hitungan detik, bukan menunggu
+# toolchain ESP32 selesai di-download/di-compile terlebih dahulu):
+#   1. unit-tests : `pio test -e native` — backoff.h, time_estimate.h, dan
+#      event_logger.cpp (kode PRODUKSI, bukan tiruan) diuji sebagai
+#      PERILAKU nyata di host (ring buffer, ketahanan power-loss, epoch).
+#   2. build       : `pio run` untuk env:esp32dev DAN env:esp32dev-bench
+#      (matrix) — memastikan firmware benar-benar mengompilasi untuk
+#      target ESP32 sungguhan di kedua konfigurasi transport (TLS wajib
+#      vs bench HTTP lokal).
+#
+# PR TIDAK dianggap lulus quality gate sebelum KEDUA job ini hijau.
+>>>>>>> origin/main
 
 on:
   pull_request:
@@ -46,6 +67,7 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
+<<<<<<< HEAD
 concurrency:
   group: quality-gate-${{ github.ref }}
   cancel-in-progress: true
@@ -56,6 +78,19 @@ jobs:
   # ==================================================================
   firmware-unit-tests:
     name: Firmware unit tests (env:native)
+=======
+
+# Batalkan run lama pada PR/branch yang sama jika ada push baru, supaya
+# tidak antre menjalankan build yang sudah usang.
+concurrency:
+  group: firmware-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # LAPIS 1: Unit test murni (host, tanpa ESP32) — jalan duluan & cepat.
+  unit-tests:
+    name: Unit tests (env:native)
+>>>>>>> origin/main
     runs-on: ubuntu-latest
 
     steps:
@@ -82,6 +117,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
+<<<<<<< HEAD
       # ---- QUALITY GATE: seluruh test suite di test/ wajib lulus ----
       # test_backoff, test_time_estimate, test_url_utils (pure logic),
       # test_event_logger, test_access_policy (kode produksi + stub NVS
@@ -140,6 +176,24 @@ jobs:
       fail-fast: false
       matrix:
         environment: [esp32dev, esp32dev-bench, esp32dev-phase3only]
+=======
+      # QUALITY GATE: seluruh test suite di test/ wajib lulus 
+      # Mencakup test_backoff, test_time_estimate, dan test_event_logger
+      # (lihat platformio.ini [env:native] untuk cakupan & rasionalnya).
+      - name: Jalankan unit test (native)
+        run: pio test -e native --verbose
+
+  # LAPIS 2: Build firmware ESP32 sungguhan — hanya jalan jika unit-tests lulus.
+  build:
+    name: Build (${{ matrix.environment }})
+    needs: unit-tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [esp32dev, esp32dev-bench]
+>>>>>>> origin/main
 
     steps:
       - name: Checkout kode
@@ -162,6 +216,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-${{ matrix.environment }}-
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
       - name: Install PlatformIO Core
         run: |
           python -m pip install --upgrade pip
@@ -170,6 +228,7 @@ jobs:
       - name: Tampilkan versi & environment terdeteksi
         run: |
           pio --version
+<<<<<<< HEAD
           pio project config -e ${{ matrix.environment }}
 
       # ---- QUALITY GATE UTAMA: build wajib sukses tanpa error ----
@@ -183,11 +242,27 @@ jobs:
       # memblokir PR yang sah.
       - name: Static check (cppcheck via PlatformIO)
         run: pio check -e ${{ matrix.environment }} --skip-packages --fail-on-defect=high --severity=high,medium,low
+=======
+          pio project config
+
+      # QUALITY GATE UTAMA: build wajib sukses tanpa error 
+      - name: Build firmware (${{ matrix.environment }})
+        run: pio run -e ${{ matrix.environment }}
+
+      # Static analysis tambahan (non-blocking untuk saat ini)
+      # Diaktifkan sebagai laporan, belum men-gagalkan pipeline, supaya
+      # tidak memblokir Phase 3 hanya karena legacy warning. Ubah ke
+      # exit-code tegas (hapus "|| true") saat siap menegakkan aturan
+      # lebih ketat di fase-fase berikutnya.
+      - name: Static check (cppcheck via PlatformIO)
+        run: pio check -e ${{ matrix.environment }} --skip-packages || true
+>>>>>>> origin/main
 
       - name: Ringkasan ukuran firmware
         if: success()
         run: pio run -e ${{ matrix.environment }} --target size
 
+<<<<<<< HEAD
   # ==================================================================
   # Ringkasan tunggal untuk branch protection rule ("1 required check"
   # alih-alih harus mendaftarkan semua nama job+matrix satu per satu).
@@ -206,3 +281,5 @@ jobs:
             exit 1
           fi
           echo "Semua job quality gate lulus."
+=======
+>>>>>>> origin/main

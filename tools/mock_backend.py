@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """
+<<<<<<< HEAD
 mock_backend.py — backend palsu untuk bench-test END-TO-END Phase 3 + Phase 4
 (HANYA stdlib Python 3.7+, tanpa dependensi eksternal).
 
@@ -42,17 +43,43 @@ import time
 import urllib.request
 import uuid
 from datetime import datetime, timedelta, timezone
+=======
+mock_backend.py — backend palsu untuk bench-test Phase 3 (HANYA stdlib Python 3.7+).
+
+Menerima POST /api/v1/events dari firmware, memvalidasi token, melakukan
+deduplikasi idempoten, dan mencetak setiap event.
+
+Contoh:
+  python tools/mock_backend.py --token dev-token-123
+  python tools/mock_backend.py --token dev-token-123 --fail-next 3   # 3 request pertama dibalas 503
+  python tools/mock_backend.py --token dev-token-123 --port 8000
+
+Di firmware (include/secrets.h), untuk env esp32dev-bench:
+  #define DEVICE_API_TOKEN        "dev-token-123"
+  #define BACKEND_EVENTS_ENDPOINT "http://<IP-PC-Anda>:8000/api/v1/events"
+"""
+import argparse
+import json
+import threading
+from datetime import datetime, timezone, timedelta
+>>>>>>> origin/main
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 WIB = timezone(timedelta(hours=7))
 LOCK = threading.Lock()
+<<<<<<< HEAD
 SEEN = set()  # kunci dedup event: (device_id, log_epoch, boot_id, sequence)
 COMMANDS = []  # list of dict, in-memory (hilang saat server di-restart -- ini mock, bukan Phase 3/4 asli)
 STATE = {"requests": 0, "fail_left": 0, "token": "", "hmac_secret": "", "events": 0, "dups": 0}
+=======
+SEEN = set()            # kunci dedup: (device_id, log_epoch, boot_id, sequence)
+STATE = {"requests": 0, "fail_left": 0, "token": "", "events": 0, "dups": 0}
+>>>>>>> origin/main
 
 
 def fmt_ts(ts):
     if ts is None:
+<<<<<<< HEAD
         return "(tanpa waktu)"
     return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(WIB).strftime("%Y-%m-%d %H:%M:%S WIB")
 
@@ -73,6 +100,12 @@ def sign_command(hmac_secret, command_id, command_type, issued_at, expires_at, p
     return hmac_lib.new(hmac_secret.encode(), msg.encode(), hashlib.sha256).hexdigest()
 
 
+=======
+        return "         (tanpa waktu)        "
+    return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone(WIB).strftime("%Y-%m-%d %H:%M:%S WIB")
+
+
+>>>>>>> origin/main
 class Handler(BaseHTTPRequestHandler):
     def _reply(self, code, obj):
         body = json.dumps(obj).encode()
@@ -82,6 +115,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+<<<<<<< HEAD
     def log_message(self, *args):  # senyapkan log akses default
         pass
 
@@ -96,15 +130,25 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     # ---------------- Phase 3 ----------------
+=======
+    def log_message(self, *args):   # senyapkan log akses default
+        pass
+
+>>>>>>> origin/main
     def do_POST(self):
         with LOCK:
             STATE["requests"] += 1
             n = STATE["requests"]
+<<<<<<< HEAD
             if STATE["fail_left"] > 0 and "/ack" not in self.path:
+=======
+            if STATE["fail_left"] > 0:
+>>>>>>> origin/main
                 STATE["fail_left"] -= 1
                 print(f"[#{n}] (simulasi gagal) -> 503, sisa {STATE['fail_left']}")
                 return self._reply(503, {"error": "simulated outage"})
 
+<<<<<<< HEAD
         if self.path == "/api/v1/events":
             return self._handle_events(n)
         if self.path == "/api/v1/devices/heartbeat":
@@ -131,6 +175,30 @@ class Handler(BaseHTTPRequestHandler):
 
         new, dup = 0, 0
         print(f"\n[#{n}] EVENTS {device} fw={payload.get('firmware_version')} epoch={epoch} "
+=======
+        if self.path != "/api/v1/events":
+            return self._reply(404, {"error": "not found"})
+
+        if self.headers.get("Authorization", "") != f"Bearer {STATE['token']}":
+            print(f"[#{n}] TOKEN DITOLAK dari {self.client_address[0]}")
+            return self._reply(401, {"error": "invalid device token"})
+
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length))
+            device = payload["device_id"]
+            events = payload["events"]
+            epoch = payload.get("log_epoch", 0)
+        except Exception as exc:
+            print(f"[#{n}] payload tidak valid: {exc}")
+            return self._reply(400, {"error": "bad payload"})
+
+        if self.headers.get("X-Device-Id") != device:
+            return self._reply(403, {"error": "device id mismatch"})
+
+        new, dup = 0, 0
+        print(f"\n[#{n}] {device} fw={payload.get('firmware_version')} epoch={epoch} "
+>>>>>>> origin/main
               f"missed={payload.get('missed_events', 0)} sent_at={fmt_ts(payload.get('sent_at'))}")
         for e in events:
             key = (device, epoch, e["boot_id"], e["sequence"])
@@ -142,6 +210,7 @@ class Handler(BaseHTTPRequestHandler):
             print(f"   {'DUP' if is_dup else 'NEW'} seq={e['sequence']:<4} boot={e['boot_id']:<3} "
                   f"{fmt_ts(e.get('timestamp'))} [{e['time_source']:<9}] "
                   f"{e['type']:<21} detail={e['detail']:<3} \"{e['message']}\"")
+<<<<<<< HEAD
         print(f"   -> baru={new} duplikat={dup} | total unik={STATE['events']} total duplikat={STATE['dups']}")
         last = events[-1]["sequence"] if events else 0
         return self._reply(201, {"accepted": new, "duplicates": dup, "last_sequence": last})
@@ -294,6 +363,22 @@ def main():
     print(f"Mock backend (Phase 3+4) di 0.0.0.0:{args.port}  (Ctrl+C untuk berhenti)")
     print(f"Admin API (enqueue command) di 127.0.0.1:{args.admin_port}")
     print(f"Contoh dari terminal lain: python {__file__} --enqueue REMOTE_UNLOCK --device {args.device}")
+=======
+        with LOCK:
+            print(f"   -> baru={new} duplikat={dup} | total unik={STATE['events']} total duplikat={STATE['dups']}")
+        last = events[-1]["sequence"] if events else 0
+        return self._reply(201, {"accepted": new, "duplicates": dup, "last_sequence": last})
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--token", required=True, help="Bearer token yang dianggap sah")
+    ap.add_argument("--fail-next", type=int, default=0, help="balas 503 untuk N request pertama (uji retry/backoff)")
+    args = ap.parse_args()
+    STATE["token"], STATE["fail_left"] = args.token, args.fail_next
+    print(f"Mock backend di 0.0.0.0:{args.port}  (Ctrl+C untuk berhenti)")
+>>>>>>> origin/main
     ThreadingHTTPServer(("0.0.0.0", args.port), Handler).serve_forever()
 
 

@@ -61,6 +61,7 @@ class StateMachine {
     void runErrorSafe();
 
     void setIndicator(bool red, bool green, bool blue);
+<<<<<<< HEAD
 
     // [Phase 4] Menandai UNLOCKED saat ini berasal dari command REMOTE_UNLOCK
     // (lewat CommandClient::consumeUnlockRequest di runIdle()), bukan sidik
@@ -71,6 +72,8 @@ class StateMachine {
     // dependensi Phase 4 sesuai arah ketergantungan di wiki/Architecture.md.
     bool _remoteUnlockActive = false;
     String _remoteCommandId;
+=======
+>>>>>>> origin/main
 };
 
 extern StateMachine stateMachine;

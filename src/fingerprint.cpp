@@ -1,6 +1,7 @@
 #include "fingerprint.h"
 #include "config.h"
 
+<<<<<<< HEAD
 #if ENABLE_PHASE4_FEATURES
 #include "phase4/access_policy.h"
 #endif
@@ -28,6 +29,10 @@ static bool slotAuthorized(int slot) {
 #endif
 }
 
+=======
+FingerprintModule fingerprintModule;
+
+>>>>>>> origin/main
 // ================================================================
 // MODE 1: MOCK (tanpa sensor fisik) — Serial Monitor + Push Button
 // ================================================================
@@ -79,7 +84,10 @@ FingerprintResult FingerprintModule::verify() {
   // dengan slot dummy #1, supaya bisa uji alur UNLOCKED langsung.
   if (digitalRead(MOCK_TOUCH_BUTTON_PIN) == LOW && !Serial.available()) {
     _lastMatchedSlot = 1;
+<<<<<<< HEAD
     if (!slotAuthorized(_lastMatchedSlot)) return FingerprintResult::NO_MATCH;
+=======
+>>>>>>> origin/main
     Serial.println("[FINGERPRINT] (mock/button) -> MATCH (slot #1)");
     return FingerprintResult::MATCH;
   }
@@ -91,7 +99,10 @@ FingerprintResult FingerprintModule::verify() {
       char c = Serial.read();
       if (c == 'm') {
         _lastMatchedSlot = 1;
+<<<<<<< HEAD
         if (!slotAuthorized(_lastMatchedSlot)) return FingerprintResult::NO_MATCH;
+=======
+>>>>>>> origin/main
         Serial.println("[FINGERPRINT] (mock/serial) -> MATCH (slot #1)");
         return FingerprintResult::MATCH;
       } else if (c == 'x') {
@@ -174,7 +185,10 @@ FingerprintResult FingerprintModule::verify() {
 
   if (p == FINGERPRINT_OK) {
     _lastMatchedSlot = finger.fingerID;
+<<<<<<< HEAD
     if (!slotAuthorized(_lastMatchedSlot)) return FingerprintResult::NO_MATCH;
+=======
+>>>>>>> origin/main
     Serial.print("[FINGERPRINT] MATCH slot #");
     Serial.println(_lastMatchedSlot);
     return FingerprintResult::MATCH;
