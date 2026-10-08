@@ -4,6 +4,13 @@
 #include "actuator.h"
 #include "event_logger.h"
 
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+#include "phase4/command_client.h"
+#endif
+
+=======
+>>>>>>> origin/main
 StateMachine stateMachine;
 
 const char* stateToString(SystemState state) {
@@ -61,9 +68,17 @@ void StateMachine::update() {
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // BOOT: titik masuk tunggal, baik dari cold start maupun dari
 // POWER RESTORED (SRS 13.5). Tidak melakukan apa pun selain
 // mencatat log dan langsung lanjut ke INITIALIZE.
+// ----------------------------------------------------------------
+=======
+// BOOT: titik masuk tunggal, baik dari cold start maupun dari
+// POWER RESTORED (SRS 13.5). Tidak melakukan apa pun selain
+// mencatat log dan langsung lanjut ke INITIALIZE.
+>>>>>>> origin/main
 void StateMachine::runBoot() {
   Serial.println("[BOOT] Memulai Biometric Smart Key Firmware");
 
@@ -74,9 +89,17 @@ void StateMachine::runBoot() {
   enterState(SystemState::INITIALIZE);
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // INITIALIZE: konfigurasi modul & pin (SRS 5.1). Aktuator SELALU
 // dipaksa ke posisi LOCKED di sini sebagai fail-safe pertama,
 // sebelum status hardware diverifikasi.
+// ----------------------------------------------------------------
+=======
+// INITIALIZE: konfigurasi modul & pin (SRS 5.1). Aktuator SELALU
+// dipaksa ke posisi LOCKED di sini sebagai fail-safe pertama,
+// sebelum status hardware diverifikasi.
+>>>>>>> origin/main
 void StateMachine::runInitialize() {
   setIndicator(false, false, true); // biru = sedang inisialisasi
 
@@ -86,10 +109,18 @@ void StateMachine::runInitialize() {
   enterState(SystemState::HARDWARE_CHECK);
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
+=======
+>>>>>>> origin/main
 // HARDWARE_CHECK: verifikasi sensor & aktuator sebelum sistem
 // diizinkan masuk ke mode operasional (SRS 5.1).
 //   PASS -> LOCKED -> IDLE
 //   FAIL -> ERROR_SAFE
+<<<<<<< HEAD
+// ----------------------------------------------------------------
+=======
+>>>>>>> origin/main
 void StateMachine::runHardwareCheck() {
   bool sensorOk   = fingerprintModule.healthCheck();
   bool actuatorOk = actuatorModule.healthCheck();
@@ -113,26 +144,69 @@ void StateMachine::runHardwareCheck() {
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // LOCKED: kondisi aktuator terkunci secara fisik, transit singkat
 // menuju IDLE begitu dikonfirmasi terkunci (SRS 6.1).
+// ----------------------------------------------------------------
+=======
+// LOCKED: kondisi aktuator terkunci secara fisik, transit singkat
+// menuju IDLE begitu dikonfirmasi terkunci (SRS 6.1).
+>>>>>>> origin/main
 void StateMachine::runLocked() {
   actuatorModule.lock();
   setIndicator(false, false, true); // biru = aman/terkunci
   enterState(SystemState::IDLE);
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
+// IDLE: menunggu sentuhan jari secara non-blocking (SRS 6.1).
+// ----------------------------------------------------------------
+void StateMachine::runIdle() {
+  setIndicator(false, false, true);
+
+#if ENABLE_PHASE4_FEATURES
+  // Dicek LEBIH DULU daripada sidik jari: permintaan REMOTE_UNLOCK yang
+  // sudah lolos verifikasi HMAC+expiry di command_client.cpp (net task)
+  // berhak langsung membuka kunci tanpa menunggu VERIFYING, persis seperti
+  // operator yang menekan tombol unlock dari dashboard. Konsisten dengan
+  // SRS 6.3: hanya berlaku di IDLE -- TIDAK PERNAH dikonsumsi saat
+  // ERROR_SAFE/VERIFYING/dsb, karena fungsi ini memang hanya dipanggil
+  // dari sini. Command yang datang saat device tidak di IDLE akan
+  // kadaluwarsa sendiri di sisi command_client (checkUnlockBridgeExpiry())
+  // dan dilaporkan "expired" ke backend, bukan menggantung selamanya.
+  char remoteCmdId[COMMAND_ID_MAX_LEN];
+  if (commandClient.consumeUnlockRequest(remoteCmdId, sizeof(remoteCmdId))) {
+    _remoteUnlockActive = true;
+    _remoteCommandId = remoteCmdId;
+    enterState(SystemState::UNLOCKED);
+    return;
+  }
+#endif
+
+=======
 // IDLE: menunggu sentuhan jari secara non-blocking (SRS 6.1).
 void StateMachine::runIdle() {
   setIndicator(false, false, true);
 
+>>>>>>> origin/main
   if (fingerprintModule.isFingerPresent()) {
     enterState(SystemState::VERIFYING);
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // VERIFYING: proses pencocokan sidik jari (SRS 5.2, FR-001, FR-003).
 // verify() sendiri sudah dibatasi FP_VERIFY_TIMEOUT_MS agar tidak
 // memblokir loop() terlalu lama.
+// ----------------------------------------------------------------
+=======
+// VERIFYING: proses pencocokan sidik jari (SRS 5.2, FR-001, FR-003).
+// verify() sendiri sudah dibatasi FP_VERIFY_TIMEOUT_MS agar tidak
+// memblokir loop() terlalu lama.
+>>>>>>> origin/main
 void StateMachine::runVerifying() {
   setIndicator(false, false, true);
   Serial.println("[VERIFYING] Mencocokkan sidik jari...");
@@ -161,19 +235,48 @@ void StateMachine::runVerifying() {
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // UNLOCKED: aktuator terbuka, indikator hijau, auto-lock setelah
 // UNLOCK_DURATION_MS (SRS 5.3, FR-004, FR-005).
+// ----------------------------------------------------------------
+=======
+// UNLOCKED: aktuator terbuka, indikator hijau, auto-lock setelah
+// UNLOCK_DURATION_MS (SRS 5.3, FR-004, FR-005).
+>>>>>>> origin/main
 void StateMachine::runUnlocked() {
   // Aksi buka hanya dijalankan sekali saat baru masuk state ini.
   if (timeInState() < 20) { // window kecil untuk "baru saja masuk"
     actuatorModule.unlock();
     setIndicator(false, true, false); // hijau
+<<<<<<< HEAD
+
+#if ENABLE_PHASE4_FEATURES
+    if (_remoteUnlockActive) {
+      Serial.println("[UNLOCKED] Akses diberikan via REMOTE_UNLOCK (backend).");
+      eventLogger.logEvent(EventType::REMOTE_UNLOCK, -1, "Remote unlock command executed");
+      // Laporkan hasil SEKARANG (bukan tunda) -- commandClient yang akan
+      // mengirim ack ke backend dari net task saat tick berikutnya.
+      commandClient.reportUnlockResult(_remoteCommandId.c_str(), true, "unlocked");
+      _remoteUnlockActive = false;
+      _remoteCommandId = "";
+    } else
+#endif
+    {
+      Serial.println("[UNLOCKED] Akses diberikan. Auto-lock dalam "
+                      + String(UNLOCK_DURATION_MS / 1000) + " detik.");
+      eventLogger.logEvent(EventType::ACCESS_GRANTED,
+                            static_cast<int16_t>(fingerprintModule.lastMatchedSlotId()),
+                            "Fingerprint matched");
+    }
+=======
     Serial.println("[UNLOCKED] Akses diberikan. Auto-lock dalam "
                     + String(UNLOCK_DURATION_MS / 1000) + " detik.");
 
     eventLogger.logEvent(EventType::ACCESS_GRANTED,
                           static_cast<int16_t>(fingerprintModule.lastMatchedSlotId()),
                           "Fingerprint matched");
+>>>>>>> origin/main
   }
 
   if (timeInState() >= UNLOCK_DURATION_MS) {
@@ -181,8 +284,15 @@ void StateMachine::runUnlocked() {
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // DENIED: akses ditolak, indikator merah sesaat, lalu kembali IDLE
 // (SRS 6.1, FR-003).
+// ----------------------------------------------------------------
+=======
+// DENIED: akses ditolak, indikator merah sesaat, lalu kembali IDLE
+// (SRS 6.1, FR-003).
+>>>>>>> origin/main
 void StateMachine::runDenied() {
   if (timeInState() < 20) {
     setIndicator(true, false, false); // merah
@@ -196,9 +306,17 @@ void StateMachine::runDenied() {
   }
 }
 
+<<<<<<< HEAD
+// ----------------------------------------------------------------
 // ERROR_SAFE: pintu dipaksa terkunci secara mekanis, perintah buka
 // dilarang keras (SRS 6.3), lalu menjalankan siklus recovery
 // menuju HARDWARE_CHECK setelah jeda (SRS 5.4, 13.3, 13.7).
+// ----------------------------------------------------------------
+=======
+// ERROR_SAFE: pintu dipaksa terkunci secara mekanis, perintah buka
+// dilarang keras (SRS 6.3), lalu menjalankan siklus recovery
+// menuju HARDWARE_CHECK setelah jeda (SRS 5.4, 13.3, 13.7).
+>>>>>>> origin/main
 void StateMachine::runErrorSafe() {
   if (timeInState() < 20) {
     actuatorModule.lock(); // paksa terkunci, tanpa pengecualian

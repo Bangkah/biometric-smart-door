@@ -4,6 +4,10 @@
 #include "network_manager.h"
 #include "time_sync.h"
 #include "backoff.h"
+<<<<<<< HEAD
+#include "url_utils.h"
+=======
+>>>>>>> origin/main
 
 #include <Preferences.h>
 #include <HTTPClient.h>
@@ -33,7 +37,12 @@ const char* syncResultToString(SyncResult result) {
 // ------------------------------------------------------------
 void ApiClient::begin() {
   _enabled = false;
+<<<<<<< HEAD
+  _heartbeatEnabled = false;
+  _taskTickAt = millis();
+=======
   _heartbeatAt = millis();
+>>>>>>> origin/main
 
   if (!NETWORK_ENABLED || strlen(WIFI_SSID) == 0) {
     Serial.println("[API_CLIENT] Jaringan tidak dikonfigurasi -> upload dinonaktifkan (offline-only).");
@@ -67,6 +76,24 @@ void ApiClient::begin() {
     Serial.println("[API_CLIENT] PERINGATAN: TLS TANPA verifikasi sertifikat (BACKEND_TLS_INSECURE) — dev saja!");
   }
 
+<<<<<<< HEAD
+  // Device Heartbeat (SRS 8.2/10.3, FR-015): endpoint diturunkan dari
+  // BACKEND_EVENTS_ENDPOINT supaya secrets.h Phase 3 tetap kompatibel tanpa
+  // field tambahan. Kegagalan menurunkan URL TIDAK menggagalkan sync event
+  // -> hanya heartbeat independen ini yang nonaktif.
+  char baseUrl[96];
+  if (urlutils::deriveBaseUrl(BACKEND_EVENTS_ENDPOINT, baseUrl, sizeof(baseUrl))) {
+    _heartbeatUrl = String(baseUrl) + "/api/v1/devices/heartbeat";
+    _heartbeatEnabled = true;
+    _nextHeartbeatAt = millis();  // kirim heartbeat pertama secepatnya setelah Wi-Fi tersambung
+  } else {
+    Serial.println("[API_CLIENT] PERINGATAN: tidak bisa menurunkan URL heartbeat dari "
+                   "BACKEND_EVENTS_ENDPOINT (endpoint custom?) -> heartbeat independen nonaktif; "
+                   "sync event tetap berjalan normal.");
+  }
+
+=======
+>>>>>>> origin/main
   loadState();
   _enabled = true;
   Serial.printf("[API_CLIENT] Siap. epoch=%lu, lastSyncedSequence=%lu, interval=%lu s, batch=%d.\n",
@@ -94,7 +121,21 @@ void ApiClient::saveState() {
 // update(): dipanggil ~tiap NET_TASK_TICK_MS oleh network task.
 // ------------------------------------------------------------
 void ApiClient::update() {
+<<<<<<< HEAD
+  _taskTickAt = millis();
+  unsigned long now = millis();
+
+  // Heartbeat berjalan DI SINI, sebelum semua gating sync event di bawah
+  // (timing sync, NTP, manual request) — SENGAJA supaya kegagalan/penundaan
+  // sync event tidak pernah menunda heartbeat, dan sebaliknya (lihat header
+  // api_client.h). Tetap menghormati _enabled (kebijakan TLS/token yang
+  // sama) dan status koneksi Wi-Fi.
+  if (_enabled && networkManager.isConnected()) {
+    sendHeartbeatIfDue(now);
+  }
+=======
   _heartbeatAt = millis();
+>>>>>>> origin/main
 
   if (!_enabled) {
     if (_manualRequest) {
@@ -105,7 +146,10 @@ void ApiClient::update() {
   }
 
   bool manual = _manualRequest;
+<<<<<<< HEAD
+=======
   unsigned long now = millis();
+>>>>>>> origin/main
 
   // Belum waktunya (dan tidak diminta manual)? Keluar tanpa menyentuh apa pun.
   if (!manual && static_cast<long>(now - _nextAttemptAt) < 0) return;
@@ -261,7 +305,11 @@ void ApiClient::syncOnce(bool manual) {
                 (unsigned long)n, (unsigned long)firstSeq, (unsigned long)lastSeq, (unsigned)len);
 
   String errInfo;
+<<<<<<< HEAD
+  int code = httpPost(BACKEND_EVENTS_ENDPOINT, reinterpret_cast<const uint8_t*>(payload), len, errInfo);
+=======
   int code = httpPost(reinterpret_cast<const uint8_t*>(payload), len, errInfo);
+>>>>>>> origin/main
   free(payload);
 
   now = millis();
@@ -294,10 +342,18 @@ void ApiClient::syncOnce(bool manual) {
 }
 
 // ------------------------------------------------------------
+<<<<<<< HEAD
+// httpPost(): satu request POST ke `url` manapun (events ATAU heartbeat,
+// keduanya memakai auth Bearer+X-Device-Id yang sama). Semua tahap
+// dibatasi timeout sehingga network task tidak bisa menggantung tanpa batas.
+// ------------------------------------------------------------
+int ApiClient::httpPost(const String& url, const uint8_t* body, size_t len, String &errInfo) {
+=======
 // httpPost(): satu request. Semua tahap dibatasi timeout sehingga network
 // task tidak bisa menggantung tanpa batas.
 // ------------------------------------------------------------
 int ApiClient::httpPost(const uint8_t* body, size_t len, String &errInfo) {
+>>>>>>> origin/main
   WiFiClientSecure secureClient;
   WiFiClient plainClient;
   HTTPClient http;
@@ -313,12 +369,21 @@ int ApiClient::httpPost(const uint8_t* body, size_t len, String &errInfo) {
     } else {
       secureClient.setInsecure();  // hanya tercapai bila BACKEND_TLS_INSECURE=1 (divalidasi di begin())
     }
+<<<<<<< HEAD
+    ok = http.begin(secureClient, url);
+  } else {
+    ok = http.begin(plainClient, url);
+  }
+  if (!ok) {
+    errInfo = "http.begin() gagal — periksa URL: " + url;
+=======
     ok = http.begin(secureClient, BACKEND_EVENTS_ENDPOINT);
   } else {
     ok = http.begin(plainClient, BACKEND_EVENTS_ENDPOINT);
   }
   if (!ok) {
     errInfo = "http.begin() gagal — periksa BACKEND_EVENTS_ENDPOINT";
+>>>>>>> origin/main
     return -1000;
   }
 
@@ -339,6 +404,52 @@ int ApiClient::httpPost(const uint8_t* body, size_t len, String &errInfo) {
 }
 
 // ------------------------------------------------------------
+<<<<<<< HEAD
+// sendHeartbeatIfDue(): SRS 8.2/10.3, FR-015. Murni periodik — TIDAK
+// bergantung pada ada/tidaknya event untuk disinkron, TIDAK menunggu NTP,
+// dan kegagalannya TIDAK menggunakan backoff eksponensial (supaya device
+// tidak "terlihat" makin lama makin offline di dashboard hanya karena satu
+// siklus heartbeat gagal) — jadwal berikutnya tetap maju flat setiap
+// HEARTBEAT_INTERVAL_MS apa pun hasilnya.
+// ------------------------------------------------------------
+void ApiClient::sendHeartbeatIfDue(unsigned long now) {
+  if (!_heartbeatEnabled) return;
+  if (static_cast<long>(now - _nextHeartbeatAt) < 0) return;
+
+  JsonDocument doc;
+  doc["firmware_version"] = FIRMWARE_VERSION;
+  doc["uptime_ms"] = now;
+  doc["free_heap_bytes"] = ESP.getFreeHeap();
+
+  size_t len = measureJson(doc);
+  char* payload = static_cast<char*>(malloc(len + 1));
+  if (payload == nullptr) {
+    _nextHeartbeatAt = now + HEARTBEAT_INTERVAL_MS;  // coba lagi siklus berikutnya, jangan spin
+    return;
+  }
+  serializeJson(doc, payload, len + 1);
+
+  String errInfo;
+  int code = httpPost(_heartbeatUrl, reinterpret_cast<const uint8_t*>(payload), len, errInfo);
+  free(payload);
+
+  _lastHeartbeatHttpCode = code;
+  if (code >= 200 && code < 300) {
+    _lastHeartbeatOkAt = millis();
+    _everHeartbeatOk = true;
+    _heartbeatFailCount = 0;
+    Serial.printf("[API_CLIENT] Heartbeat OK (HTTP %d).\n", code);
+  } else {
+    if (_heartbeatFailCount < 65000) _heartbeatFailCount++;
+    Serial.printf("[API_CLIENT] Heartbeat GAGAL (HTTP %d) %s — akses lokal TIDAK terpengaruh.\n",
+                  code, errInfo.c_str());
+  }
+  _nextHeartbeatAt = now + HEARTBEAT_INTERVAL_MS;
+}
+
+// ------------------------------------------------------------
+=======
+>>>>>>> origin/main
 // printStatus(): perintah debugger 'w' (bagian sync). Token tidak dicetak.
 // ------------------------------------------------------------
 void ApiClient::printStatus() const {
@@ -368,5 +479,25 @@ void ApiClient::printStatus() const {
     long wait = static_cast<long>(_nextAttemptAt - millis());
     Serial.printf("Gagal beruntun: %u, retry berikutnya ~%ld s\n", (unsigned)_failCount, wait > 0 ? wait / 1000L : 0L);
   }
+<<<<<<< HEAD
+
+  Serial.println("---------- DEVICE HEARTBEAT ----------");
+  if (!_heartbeatEnabled) {
+    Serial.println("Status    : NONAKTIF (BACKEND_EVENTS_ENDPOINT tidak berakhiran /api/v1/events?)");
+  } else {
+    Serial.printf("URL       : %s\n", _heartbeatUrl.c_str());
+    Serial.printf("Interval  : %lu s\n", HEARTBEAT_INTERVAL_MS / 1000UL);
+    Serial.printf("Terakhir  : HTTP %d\n", _lastHeartbeatHttpCode);
+    if (_everHeartbeatOk) {
+      Serial.printf("Sukses terakhir: %lu s lalu\n", (millis() - _lastHeartbeatOkAt) / 1000UL);
+    }
+    if (_heartbeatFailCount > 0) {
+      Serial.printf("Gagal beruntun: %u (akses lokal tetap normal)\n", (unsigned)_heartbeatFailCount);
+    }
+  }
+
+  Serial.printf("Network task: tick terakhir %lu ms lalu\n", millis() - _taskTickAt);
+=======
   Serial.printf("Network task: tick terakhir %lu ms lalu\n", millis() - _heartbeatAt);
+>>>>>>> origin/main
 }

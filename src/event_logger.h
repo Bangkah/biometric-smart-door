@@ -36,6 +36,13 @@ enum class EventType : uint8_t {
   ERROR_SAFE_TRIGGERED,
   RECOVERY_ATTEMPT,
   LOG_CLEARED,
+<<<<<<< HEAD
+  // ---- [Phase 4] Remote command & access sync (SRS 7.4, 10.5, 12.5) ----
+  REMOTE_UNLOCK,        // akses diberikan via command REMOTE_UNLOCK (bukan sidik jari)
+  COMMAND_REJECTED,     // command ditolak: signature tidak valid / kadaluwarsa / tipe tak dikenal
+  USER_SYNC_APPLIED,    // ALLOW_SLOT/REVOKE_SLOT berhasil diterapkan ke access_policy lokal
+=======
+>>>>>>> origin/main
   UNKNOWN = 255
 };
 

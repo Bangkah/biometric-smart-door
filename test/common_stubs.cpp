@@ -42,7 +42,18 @@ std::map<std::string, std::map<std::string, uint32_t>>& __test_fake_nvs() {
   static std::map<std::string, std::map<std::string, uint32_t>> nvs;
   return nvs;
 }
+<<<<<<< HEAD
+std::map<std::string, std::map<std::string, uint64_t>>& __test_fake_nvs_u64() {
+  static std::map<std::string, std::map<std::string, uint64_t>> nvs64;
+  return nvs64;
+}
+void __test_reset_fake_nvs() {
+  __test_fake_nvs().clear();
+  __test_fake_nvs_u64().clear();
+}
+=======
 void __test_reset_fake_nvs() { __test_fake_nvs().clear(); }
+>>>>>>> origin/main
 
 // ---- freertos ----
 SemaphoreHandle_t xSemaphoreCreateMutex() { return reinterpret_cast<SemaphoreHandle_t>(1); }

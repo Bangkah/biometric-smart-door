@@ -17,6 +17,12 @@ const char* eventTypeToString(EventType type) {
     case EventType::ERROR_SAFE_TRIGGERED: return "ERROR_SAFE_TRIGGERED";
     case EventType::RECOVERY_ATTEMPT:     return "RECOVERY_ATTEMPT";
     case EventType::LOG_CLEARED:          return "LOG_CLEARED";
+<<<<<<< HEAD
+    case EventType::REMOTE_UNLOCK:        return "REMOTE_UNLOCK";
+    case EventType::COMMAND_REJECTED:     return "COMMAND_REJECTED";
+    case EventType::USER_SYNC_APPLIED:    return "USER_SYNC_APPLIED";
+=======
+>>>>>>> origin/main
     default:                              return "UNKNOWN";
   }
 }

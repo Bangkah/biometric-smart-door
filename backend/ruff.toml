@@ -1,0 +1,10 @@
+line-length = 110
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B"]
+# E501: panjang baris sudah diatur lewat line-length (komentar Bahasa Indonesia kadang panjang)
+# B008: pola `Depends(...)` sebagai default argumen adalah IDIOM RESMI FastAPI,
+#       bukan bug ("function call in default argument") — dependency injection
+#       FastAPI justru bekerja dengan mengevaluasi Depends() saat definisi route.
+ignore = ["E501", "B008", "UP042"]  # UP042: StrEnum(3.11+) sengaja tidak dipakai, (str, Enum) lebih kompatibel & eksplisit untuk Pydantic

@@ -1,6 +1,12 @@
+<<<<<<< HEAD
+name: Quality Gate (Firmware + Backend)
+
+# ------------------------------------------------------------------
+=======
 
 name: Firmware CI (PlatformIO Quality Gate)
 
+>>>>>>> origin/main
 # Quality gate untuk Biometric Smart Key & Management System.
 #
 # Dijalankan pada:
@@ -8,6 +14,36 @@ name: Firmware CI (PlatformIO Quality Gate)
 #   - Setiap push ke branch berpola `phase-*` (feedback cepat sebelum PR dibuka)
 #   - Manual trigger (workflow_dispatch) untuk re-run jika perlu
 #
+<<<<<<< HEAD
+# Tiga lapis gate. Lapis 1 (cepat, tanpa toolchain ESP32/dependensi berat)
+# jalan duluan secara paralel; lapis 2 (build ESP32 sungguhan, lambat)
+# baru jalan setelah KEDUANYA di lapis 1 hijau — fail-fast, umpan balik
+# kesalahan logika didapat dalam hitungan detik, bukan menunggu toolchain
+# ESP32 selesai di-download terlebih dahulu:
+#
+#   1a. firmware-unit-tests : `pio test -e native` — backoff.h,
+#       time_estimate.h, url_utils.h (pure), dan event_logger.cpp /
+#       phase4/access_policy.cpp / phase4/command_policy.cpp (kode
+#       PRODUKSI, bukan tiruan) diuji sebagai PERILAKU nyata di host.
+#   1b. backend-tests       : pytest + coverage minimum + ruff lint
+#       untuk backend/ (FastAPI). Dijalankan PARALEL dengan 1a (bahasa
+#       & toolchain berbeda, tidak saling bergantung).
+#
+#   2.  firmware-build : `pio run`, MATRIX TIGA environment:
+#       - esp32dev            : build produksi, Phase 4 AKTIF, TLS wajib.
+#       - esp32dev-bench      : seperti esp32dev, HTTP lokal diizinkan
+#                               (kompatibilitas tools/mock_backend.py).
+#       - esp32dev-phase3only : ENABLE_PHASE4_FEATURES=0 DAN src/phase4/
+#                               dikeluarkan dari build_src_filter sama
+#                               sekali -- MEMBUKTIKAN (bukan mengklaim)
+#                               bahwa branch `phase-3` tetap compile
+#                               walau folder phase4/ belum/tidak ada.
+#       Diikuti `pio check` yang SEKARANG MENGGAGALKAN pipeline bila ada
+#       defect severity "high" (bukan lagi laporan semata).
+#
+# PR TIDAK dianggap lulus quality gate sebelum SEMUA job di bawah hijau.
+# ------------------------------------------------------------------
+=======
 # Dua lapis gate, berurutan (build menunggu unit-tests lulus -> fail-fast,
 # umpan balik logika salah didapat dalam hitungan detik, bukan menunggu
 # toolchain ESP32 selesai di-download/di-compile terlebih dahulu):
@@ -20,6 +56,7 @@ name: Firmware CI (PlatformIO Quality Gate)
 #      vs bench HTTP lokal).
 #
 # PR TIDAK dianggap lulus quality gate sebelum KEDUA job ini hijau.
+>>>>>>> origin/main
 
 on:
   pull_request:
@@ -30,6 +67,18 @@ on:
       - "phase-*"
   workflow_dispatch: {}
 
+<<<<<<< HEAD
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ==================================================================
+  # LAPIS 1a: Unit test firmware murni (host, tanpa ESP32) — cepat.
+  # ==================================================================
+  firmware-unit-tests:
+    name: Firmware unit tests (env:native)
+=======
 
 # Batalkan run lama pada PR/branch yang sama jika ada push baru, supaya
 # tidak antre menjalankan build yang sudah usang.
@@ -41,6 +90,7 @@ jobs:
   # LAPIS 1: Unit test murni (host, tanpa ESP32) — jalan duluan & cepat.
   unit-tests:
     name: Unit tests (env:native)
+>>>>>>> origin/main
     runs-on: ubuntu-latest
 
     steps:
@@ -67,6 +117,66 @@ jobs:
           python -m pip install --upgrade pip
           pip install --upgrade platformio
 
+<<<<<<< HEAD
+      # ---- QUALITY GATE: seluruh test suite di test/ wajib lulus ----
+      # test_backoff, test_time_estimate, test_url_utils (pure logic),
+      # test_event_logger, test_access_policy (kode produksi + stub NVS
+      # fungsional), test_command_policy (silang-verifikasi vs backend
+      # Python — lihat platformio.ini [env:native] untuk cakupan lengkap).
+      - name: Jalankan unit test (native)
+        run: pio test -e native --verbose
+
+  # ==================================================================
+  # LAPIS 1b: Backend (FastAPI) — pytest + coverage + lint. Paralel
+  # dengan firmware-unit-tests (tidak saling bergantung).
+  # ==================================================================
+  backend-tests:
+    name: Backend tests (pytest + ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout kode
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # ---- QUALITY GATE: lint wajib bersih (tidak ada --fix di CI) ----
+      - name: Lint (ruff)
+        run: ruff check .
+
+      # ---- QUALITY GATE: seluruh test wajib lulus + coverage minimum ----
+      # Ambang 90% SENGAJA sedikit di bawah angka aktual proyek ini (~97%)
+      # supaya ada ruang wajar, tapi tetap menolak penurunan coverage yang
+      # signifikan tanpa penjelasan.
+      - name: Test + coverage (pytest)
+        env:
+          ADMIN_API_KEY: ci-test-admin-key
+        run: pytest -v --cov=app --cov-report=term-missing --cov-fail-under=90
+
+  # ==================================================================
+  # LAPIS 2: Build firmware ESP32 sungguhan — hanya jalan jika KEDUA
+  # job Lapis 1 lulus.
+  # ==================================================================
+  firmware-build:
+    name: Firmware build (${{ matrix.environment }})
+    needs: [firmware-unit-tests, backend-tests]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [esp32dev, esp32dev-bench, esp32dev-phase3only]
+=======
       # QUALITY GATE: seluruh test suite di test/ wajib lulus 
       # Mencakup test_backoff, test_time_estimate, dan test_event_logger
       # (lihat platformio.ini [env:native] untuk cakupan & rasionalnya).
@@ -83,6 +193,7 @@ jobs:
       fail-fast: false
       matrix:
         environment: [esp32dev, esp32dev-bench]
+>>>>>>> origin/main
 
     steps:
       - name: Checkout kode
@@ -105,7 +216,10 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pio-${{ matrix.environment }}-
 
+<<<<<<< HEAD
+=======
 
+>>>>>>> origin/main
       - name: Install PlatformIO Core
         run: |
           python -m pip install --upgrade pip
@@ -114,6 +228,21 @@ jobs:
       - name: Tampilkan versi & environment terdeteksi
         run: |
           pio --version
+<<<<<<< HEAD
+          pio project config -e ${{ matrix.environment }}
+
+      # ---- QUALITY GATE UTAMA: build wajib sukses tanpa error ----
+      - name: Build firmware (${{ matrix.environment }})
+        run: pio run -e ${{ matrix.environment }}
+
+      # ---- Static analysis: SEKARANG MENGGAGALKAN pipeline untuk defect
+      # severity "high" (dulu hanya laporan lewat "|| true"). Severity
+      # medium/low tetap tampil di log sebagai info, tidak menggagalkan,
+      # supaya noise dari header vendor (ESP-IDF/Arduino core) tidak
+      # memblokir PR yang sah.
+      - name: Static check (cppcheck via PlatformIO)
+        run: pio check -e ${{ matrix.environment }} --skip-packages --fail-on-defect=high --severity=high,medium,low
+=======
           pio project config
 
       # QUALITY GATE UTAMA: build wajib sukses tanpa error 
@@ -127,8 +256,30 @@ jobs:
       # lebih ketat di fase-fase berikutnya.
       - name: Static check (cppcheck via PlatformIO)
         run: pio check -e ${{ matrix.environment }} --skip-packages || true
+>>>>>>> origin/main
 
       - name: Ringkasan ukuran firmware
         if: success()
         run: pio run -e ${{ matrix.environment }} --target size
 
+<<<<<<< HEAD
+  # ==================================================================
+  # Ringkasan tunggal untuk branch protection rule ("1 required check"
+  # alih-alih harus mendaftarkan semua nama job+matrix satu per satu).
+  # ==================================================================
+  quality-gate:
+    name: Quality gate (ringkasan)
+    needs: [firmware-unit-tests, backend-tests, firmware-build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Periksa semua job lapis sebelumnya lulus
+        run: |
+          if [ "${{ contains(needs.*.result, 'failure') }}" = "true" ] || \
+             [ "${{ contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "Satu atau lebih job quality gate GAGAL." >&2
+            exit 1
+          fi
+          echo "Semua job quality gate lulus."
+=======
+>>>>>>> origin/main

@@ -161,3 +161,47 @@
 // UNIX (estimasi) dan verifikasi sertifikat TLS memakai waktu yang benar.
 #define SYNC_REQUIRE_TIME         1
 #define API_CLIENT_NVS_NAMESPACE  "apiclient"
+<<<<<<< HEAD
+
+// ---- Device Heartbeat (SRS 8.2/10.3, FR-015) ----
+// SENGAJA konstanta terpisah dari SYNC_INTERVAL_MS: heartbeat adalah
+// telemetry murni, tidak boleh terikat pada siklus/timing sync event
+// (lihat api_client.h dan wiki/Architecture.md).
+#define HEARTBEAT_INTERVAL_MS     60000UL  // 1 menit
+
+// ============================================================
+// PHASE BOUNDARY — Phase 4: Remote User Sync & Remote Unlock
+// ============================================================
+// Modul di src/phase4/ (access_policy, command_policy, command_client) DAN
+// blok kode yang dipagari makro ini di file lain (fingerprint.cpp,
+// state_machine.cpp, main.cpp) adalah lingkup Phase 4, terpisah secara
+// fisik dari Phase 1-3 agar mudah di-branch (lihat wiki/Contributing.md
+// untuk strategi Git phase-3 vs phase-4). Default AKTIF (proyek ini sedang
+// mengerjakan Phase 4). Set ke 0 untuk build "Phase 3 murni": fingerprint
+// mock/real tidak lagi mengecek access_policy (semua slot yang cocok
+// sensor otomatis MATCH, seperti Phase 1-3 asli), dan command_client tidak
+// diinisialisasi/dijalankan sama sekali.
+#ifndef ENABLE_PHASE4_FEATURES
+#define ENABLE_PHASE4_FEATURES 1
+#endif
+
+// ---- Access Policy (SRS 7.4 Revocation, FR-013, Phase 4) ----
+#define ACCESS_POLICY_NVS_NAMESPACE "accesspol"
+
+// ---- Command Client (SRS 10.5/10.6, 12.5, Phase 4) ----
+// Endpoint /commands/poll & /commands/{id}/ack diturunkan dari
+// BACKEND_EVENTS_ENDPOINT (commandpolicy::deriveBaseUrl), sama seperti heartbeat.
+#define COMMAND_POLL_INTERVAL_MS       5000UL   // cukup responsif untuk demo remote-unlock
+#define COMMAND_HTTP_CONNECT_TIMEOUT_MS 5000UL
+#define COMMAND_HTTP_REQUEST_TIMEOUT_MS 8000UL
+#define COMMAND_RETRY_BASE_MS          5000UL
+#define COMMAND_RETRY_MAX_MS           60000UL
+#define COMMAND_CLIENT_NVS_NAMESPACE   "cmdclient"
+#define COMMAND_ID_MAX_LEN             40   // UUID (36) + margin
+#define COMMAND_TYPE_MAX_LEN           20
+#define COMMAND_SIGNATURE_HEX_LEN      64   // SHA-256 -> 32 byte -> 64 hex char
+#ifndef DEVICE_HMAC_SECRET
+#define DEVICE_HMAC_SECRET ""   // dari secrets.h; kosong = command client nonaktif (fail-closed)
+#endif
+=======
+>>>>>>> origin/main

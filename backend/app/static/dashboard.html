@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Biometric Smart Key — Dashboard</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #121820; --border: #22303c; --text: #e6edf3;
+    --muted: #8b98a5; --accent: #4fd1c5; --danger: #f87171; --warn: #fbbf24;
+    --ok: #34d399; --mono: ui-monospace, 'SF Mono', Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); min-height: 100vh;
+  }
+  header {
+    padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .75rem;
+  }
+  header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+  header h1 span { color: var(--accent); }
+  .key-row { display: flex; gap: .5rem; align-items: center; }
+  input[type=password], input[type=text] {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: .4rem .6rem; border-radius: 6px; font-family: var(--mono); font-size: .85rem;
+  }
+  button {
+    background: var(--accent); color: #042; border: none; padding: .45rem .9rem;
+    border-radius: 6px; font-weight: 600; cursor: pointer; font-size: .85rem;
+  }
+  button.secondary { background: var(--panel); color: var(--text); border: 1px solid var(--border); }
+  button.danger { background: var(--danger); color: #300; }
+  main { padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
+  nav { display: flex; gap: .5rem; margin-bottom: 1.25rem; flex-wrap: wrap; }
+  nav button { background: var(--panel); color: var(--muted); border: 1px solid var(--border); }
+  nav button.active { background: var(--accent); color: #042; border-color: var(--accent); }
+  section { display: none; }
+  section.active { display: block; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.25rem; margin-bottom: 1rem;
+  }
+  .card h2 { font-size: .95rem; margin: 0 0 .75rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+  table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 500; font-size: .75rem; text-transform: uppercase; }
+  td.mono, .mono { font-family: var(--mono); }
+  .badge { padding: .15rem .5rem; border-radius: 999px; font-size: .72rem; font-weight: 600; }
+  .badge.online, .badge.executed, .badge.active { background: rgba(52,211,153,.15); color: var(--ok); }
+  .badge.offline, .badge.failed, .badge.revoked, .badge.expired { background: rgba(248,113,113,.15); color: var(--danger); }
+  .badge.pending, .badge.acknowledged { background: rgba(251,191,36,.15); color: var(--warn); }
+  .form-row { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; align-items: center; }
+  .form-row label { font-size: .8rem; color: var(--muted); min-width: 90px; }
+  select { background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: .4rem .5rem; border-radius: 6px; font-size: .85rem; }
+  .muted { color: var(--muted); font-size: .8rem; }
+  .empty { padding: 2rem; text-align: center; color: var(--muted); font-size: .85rem; }
+  .toast {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--panel);
+    border: 1px solid var(--border); padding: .75rem 1rem; border-radius: 8px;
+    font-size: .85rem; max-width: 320px; display: none;
+  }
+  .toast.show { display: block; }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.success { border-color: var(--ok); color: var(--ok); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🔑 Biometric Smart Key <span>Dashboard</span></h1>
+  <div class="key-row">
+    <input type="password" id="adminKey" placeholder="X-Admin-Key">
+    <button onclick="saveKey()">Simpan</button>
+  </div>
+</header>
+
+<main>
+  <nav>
+    <button class="tab-btn active" data-tab="devices" onclick="switchTab('devices')">Devices</button>
+    <button class="tab-btn" data-tab="logs" onclick="switchTab('logs')">Access Logs</button>
+    <button class="tab-btn" data-tab="users" onclick="switchTab('users')">Users</button>
+    <button class="tab-btn" data-tab="commands" onclick="switchTab('commands')">Commands</button>
+  </nav>
+
+  <section id="tab-devices" class="active">
+    <div class="card">
+      <h2>Registered Devices</h2>
+      <div id="devicesTable"><div class="empty">Masukkan Admin Key lalu klik Simpan.</div></div>
+    </div>
+    <div class="card">
+      <h2>Register New Device</h2>
+      <div class="form-row">
+        <label>Device ID</label><input type="text" id="newDeviceId" placeholder="DOOR-02">
+        <label>Name</label><input type="text" id="newDeviceName" placeholder="Pintu Belakang">
+        <button onclick="registerDevice()">Register</button>
+      </div>
+      <p class="muted">Token &amp; HMAC secret hanya ditampilkan SEKALI setelah register — langsung salin ke <code>secrets.h</code> perangkat.</p>
+    </div>
+  </section>
+
+  <section id="tab-logs">
+    <div class="card">
+      <h2>Access Logs</h2>
+      <div class="form-row">
+        <label>Device</label><select id="logsDeviceFilter" onchange="loadLogs()"></select>
+      </div>
+      <div id="logsTable"><div class="empty">Pilih device.</div></div>
+    </div>
+  </section>
+
+  <section id="tab-users">
+    <div class="card">
+      <h2>Users</h2>
+      <div id="usersTable"><div class="empty">—</div></div>
+      <div class="form-row">
+        <label>Name</label><input type="text" id="newUserName" placeholder="Budi Santoso">
+        <button onclick="createUser()">Add User</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Enroll Credential (Remote User Sync)</h2>
+      <div class="form-row">
+        <label>User</label><select id="credUser"></select>
+        <label>Device</label><select id="credDevice"></select>
+        <label>Slot</label><input type="text" id="credSlot" placeholder="3" style="width:60px">
+        <button onclick="enrollCredential()">Allow Slot →</button>
+      </div>
+      <p class="muted">Otomatis mengantre command <code>ALLOW_SLOT</code> ke perangkat (lihat tab Commands).</p>
+    </div>
+  </section>
+
+  <section id="tab-commands">
+    <div class="card">
+      <h2>Send Command</h2>
+      <div class="form-row">
+        <label>Device</label><select id="cmdDevice"></select>
+        <label>Type</label>
+        <select id="cmdType" onchange="toggleSlotInput()">
+          <option value="REMOTE_UNLOCK">REMOTE_UNLOCK</option>
+          <option value="ALLOW_SLOT">ALLOW_SLOT</option>
+          <option value="REVOKE_SLOT">REVOKE_SLOT</option>
+        </select>
+        <label id="slotLabel" style="display:none">Slot</label>
+        <input type="text" id="cmdSlot" style="width:60px; display:none">
+        <button onclick="sendCommand()">Send 🔓</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Command Queue</h2>
+      <div class="form-row">
+        <label>Device</label><select id="commandsDeviceFilter" onchange="loadCommands()"></select>
+      </div>
+      <div id="commandsTable"><div class="empty">—</div></div>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let adminKey = sessionStorage.getItem('adminKey') || '';
+document.getElementById('adminKey').value = adminKey;
+
+function saveKey() {
+  adminKey = document.getElementById('adminKey').value;
+  sessionStorage.setItem('adminKey', adminKey);
+  showToast('Admin key disimpan untuk sesi ini.', 'success');
+  refreshAll();
+}
+
+function showToast(msg, kind) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (kind ? ' ' + kind : '');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'X-Admin-Key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { detail = (await res.json()).detail || detail; } catch (e) {}
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('main > section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  if (name === 'logs') loadLogs();
+  if (name === 'commands') loadCommands();
+}
+
+function badge(status) { return `<span class="badge ${status}">${status}</span>`; }
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const sec = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return `${sec}s lalu`;
+  if (sec < 3600) return `${Math.round(sec / 60)}m lalu`;
+  return `${Math.round(sec / 3600)}j lalu`;
+}
+
+let devicesCache = [];
+
+async function loadDevices() {
+  try {
+    devicesCache = await api('/api/v1/devices');
+    const rows = devicesCache.map(d => `
+      <tr>
+        <td class="mono">${d.id}</td><td>${d.name || '—'}</td>
+        <td>${badge(d.status)}</td>
+        <td class="mono">${d.firmware_version || '—'}</td>
+        <td>${timeAgo(d.last_seen)}</td>
+      </tr>`).join('');
+    document.getElementById('devicesTable').innerHTML = devicesCache.length
+      ? `<table><tr><th>ID</th><th>Name</th><th>Status</th><th>Firmware</th><th>Last Seen</th></tr>${rows}</table>`
+      : '<div class="empty">Belum ada device terdaftar.</div>';
+
+    const opts = devicesCache.map(d => `<option value="${d.id}">${d.id}</option>`).join('');
+    ['logsDeviceFilter', 'credDevice', 'cmdDevice', 'commandsDeviceFilter'].forEach(id => {
+      const el = document.getElementById(id);
+      const current = el.value;
+      el.innerHTML = opts;
+      if (current) el.value = current;
+    });
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function registerDevice() {
+  const id = document.getElementById('newDeviceId').value.trim();
+  const name = document.getElementById('newDeviceName').value.trim();
+  if (!id) return showToast('Device ID wajib diisi', 'error');
+  try {
+    const r = await api('/api/v1/devices', { method: 'POST', body: JSON.stringify({ id, name }) });
+    alert(`Device "${r.id}" terdaftar!\n\nSalin ke secrets.h SEKARANG (hanya ditampilkan sekali):\n\n#define DEVICE_API_TOKEN  "${r.api_token}"\n#define DEVICE_HMAC_SECRET  "${r.hmac_secret}"`);
+    document.getElementById('newDeviceId').value = '';
+    document.getElementById('newDeviceName').value = '';
+    loadDevices();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function loadLogs() {
+  const device = document.getElementById('logsDeviceFilter').value;
+  if (!device) return;
+  try {
+    const logs = await api(`/api/v1/devices/${device}/logs?limit=50`);
+    const rows = logs.map(l => `
+      <tr>
+        <td class="mono">#${l.sequence}</td>
+        <td><span class="badge ${l.event_type.includes('DENIED') || l.event_type.includes('REJECTED') ? 'offline' : 'online'}">${l.event_type}</span></td>
+        <td>${l.detail}</td><td>${l.message || '—'}</td>
+        <td>${l.timestamp ? new Date(l.timestamp).toLocaleString('id-ID') : l.time_source}</td>
+      </tr>`).join('');
+    document.getElementById('logsTable').innerHTML = logs.length
+      ? `<table><tr><th>Seq</th><th>Type</th><th>Detail</th><th>Message</th><th>Time</th></tr>${rows}</table>`
+      : '<div class="empty">Belum ada log untuk device ini.</div>';
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+let usersCache = [];
+async function loadUsers() {
+  try {
+    usersCache = await api('/api/v1/users');
+    const rows = usersCache.map(u => `<tr><td>${u.name}</td><td class="mono">${u.id.slice(0, 8)}…</td><td>${badge(u.status)}</td></tr>`).join('');
+    document.getElementById('usersTable').innerHTML = usersCache.length
+      ? `<table><tr><th>Name</th><th>ID</th><th>Status</th></tr>${rows}</table>`
+      : '<div class="empty">Belum ada user.</div>';
+    document.getElementById('credUser').innerHTML = usersCache.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+  } catch (e) { /* Phase 4 mungkin nonaktif (404) -- diamkan */ }
+}
+
+async function createUser() {
+  const name = document.getElementById('newUserName').value.trim();
+  if (!name) return;
+  try {
+    await api('/api/v1/users', { method: 'POST', body: JSON.stringify({ name }) });
+    document.getElementById('newUserName').value = '';
+    loadUsers();
+    showToast('User ditambahkan.', 'success');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function enrollCredential() {
+  const userId = document.getElementById('credUser').value;
+  const deviceId = document.getElementById('credDevice').value;
+  const slot = parseInt(document.getElementById('credSlot').value, 10);
+  if (!userId || !deviceId || isNaN(slot)) return showToast('Lengkapi user, device, dan slot.', 'error');
+  try {
+    await api(`/api/v1/users/${userId}/credentials`, {
+      method: 'POST', body: JSON.stringify({ device_id: deviceId, sensor_slot_id: slot }),
+    });
+    showToast(`Slot ${slot} diizinkan untuk ${deviceId}. Command ALLOW_SLOT otomatis diantre.`, 'success');
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+function toggleSlotInput() {
+  const needsSlot = document.getElementById('cmdType').value !== 'REMOTE_UNLOCK';
+  document.getElementById('slotLabel').style.display = needsSlot ? '' : 'none';
+  document.getElementById('cmdSlot').style.display = needsSlot ? '' : 'none';
+}
+
+async function sendCommand() {
+  const device_id = document.getElementById('cmdDevice').value;
+  const command_type = document.getElementById('cmdType').value;
+  const slotVal = document.getElementById('cmdSlot').value;
+  const payload = command_type !== 'REMOTE_UNLOCK' ? { slot: parseInt(slotVal, 10) } : {};
+  if (!device_id) return showToast('Pilih device.', 'error');
+  try {
+    await api('/api/v1/commands', { method: 'POST', body: JSON.stringify({ device_id, command_type, payload, ttl_seconds: 120 }) });
+    showToast(`Command ${command_type} dikirim ke ${device_id}.`, 'success');
+    loadCommands();
+  } catch (e) { showToast(e.message, 'error'); }
+}
+
+async function loadCommands() {
+  const device = document.getElementById('commandsDeviceFilter').value;
+  if (!device) return;
+  try {
+    const cmds = await api(`/api/v1/commands?device_id=${device}`);
+    const rows = cmds.map(c => `
+      <tr>
+        <td>${c.command_type}</td><td class="mono">${JSON.stringify(c.payload)}</td>
+        <td>${badge(c.status)}</td><td>${new Date(c.issued_at).toLocaleTimeString('id-ID')}</td>
+      </tr>`).join('');
+    document.getElementById('commandsTable').innerHTML = cmds.length
+      ? `<table><tr><th>Type</th><th>Payload</th><th>Status</th><th>Issued</th></tr>${rows}</table>`
+      : '<div class="empty">Belum ada command untuk device ini.</div>';
+  } catch (e) { /* Phase 4 mungkin nonaktif */ }
+}
+
+async function refreshAll() {
+  await loadDevices();
+  await loadUsers();
+}
+
+if (adminKey) refreshAll();
+setInterval(() => { if (adminKey) loadDevices(); }, 15000);
+</script>
+</body>
+</html>

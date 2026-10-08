@@ -1,5 +1,20 @@
 /*
  * main.cpp
+<<<<<<< HEAD
+ * ------------------------------------------------------------
+ * Biometric Smart Key & Management System
+ * Implementation Phase 1 (Hardware Prototype) +
+ * Implementation Phase 2 (Local Event System & Memory Buffer) +
+ * Implementation Phase 3 (Network, NTP Time Sync & Backend Event Upload) +
+ * Implementation Phase 4 (Remote Command: ALLOW/REVOKE_SLOT, REMOTE_UNLOCK)
+ *
+ * Lingkup (SRS Bab 20, Phase 1-4):
+ *   ESP32 + Sensor Sidik Jari + Servo/Relay + State Machine +
+ *   Local Event Logging (LittleFS ring buffer) + Wi-Fi/NTP + upload
+ *   event ke backend via HTTPS + polling command jarak jauh (Phase 4,
+ *   aktif/nonaktif lewat ENABLE_PHASE4_FEATURES di config.h -- lihat
+ *   wiki/Architecture.md bagian "Batas Fase").
+=======
  * Biometric Smart Key & Management System
  * Implementation Phase 1 (Hardware Prototype) +
  * Implementation Phase 2 (Local Event System & Memory Buffer) +
@@ -9,6 +24,7 @@
  *   ESP32 + Sensor Sidik Jari + Servo/Relay + State Machine +
  *   Local Event Logging (LittleFS ring buffer) + Wi-Fi/NTP + upload
  *   event ke backend via HTTPS.
+>>>>>>> origin/main
  *
  * Arsitektur eksekusi (menjaga Edge Autonomy, SRS 2.2 / NFR-002):
  *   - loop()  (core 1): watchdog + debugger Serial + state machine.
@@ -30,6 +46,10 @@
  *      'l' (lihat log), 'c' (hapus log), 'w' (status Wi-Fi/NTP/sync),
  *      's' (sync log ke backend sekarang).
  *   6. [Phase 3] Menjalankan network task terpisah.
+<<<<<<< HEAD
+ * ------------------------------------------------------------
+=======
+>>>>>>> origin/main
  */
 
 #include <Arduino.h>
@@ -40,6 +60,14 @@
 #include "time_sync.h"
 #include "api_client.h"
 
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+#include "phase4/access_policy.h"
+#include "phase4/command_client.h"
+#endif
+
+=======
+>>>>>>> origin/main
 #if defined(ESP32)
   #include <esp_task_wdt.h>
 #endif
@@ -55,9 +83,22 @@ static void printNetworkStatus() {
   Serial.println("---------- NTP ----------");
   Serial.printf("Waktu     : %s\n", timeSync.getFormattedTime().c_str());
   apiClient.printStatus();
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+  commandClient.printStatus();
+#endif
 #else
   Serial.println("[DEBUG] NETWORK_ENABLED=0: jaringan dinonaktifkan pada build ini.");
 #endif
+#if ENABLE_PHASE4_FEATURES
+  Serial.printf("[ACCESS_POLICY] mask=0x%016llX (bit=1 berarti slot diizinkan)\n",
+                (unsigned long long)accessPolicy.snapshotMask());
+#endif
+=======
+#else
+  Serial.println("[DEBUG] NETWORK_ENABLED=0: jaringan dinonaktifkan pada build ini.");
+#endif
+>>>>>>> origin/main
   Serial.printf("Free heap : %u byte (min sejak boot: %u)\n",
                 (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getMinFreeHeap());
 }
@@ -72,6 +113,12 @@ static void networkTask(void* /*param*/) {
     networkManager.update();
     timeSync.update();
     apiClient.update();
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+    commandClient.update();  // polling command jarak jauh (SRS 10.5, 10.6)
+#endif
+=======
+>>>>>>> origin/main
     vTaskDelay(pdMS_TO_TICKS(NET_TASK_TICK_MS));
   }
 }
@@ -135,7 +182,11 @@ void setup() {
   Serial.println();
   Serial.println("================================================");
   Serial.println(" Biometric Smart Key & Management System");
+<<<<<<< HEAD
+  Serial.println(" Phase 1 (Hardware) + 2 (Event Log) + 3 (Network/NTP/Sync) + 4 (Remote Command)");
+=======
   Serial.println(" Phase 1 (Hardware) + 2 (Event Log) + 3 (Network/NTP/Sync)");
+>>>>>>> origin/main
   Serial.println(" Firmware " FIRMWARE_VERSION);
   Serial.println("================================================");
 
@@ -145,7 +196,11 @@ void setup() {
   Serial.println("[BUILD] MOCK_FINGERPRINT_MODE = OFF (sensor AS608/R307 aktif)");
 #endif
 
+<<<<<<< HEAD
+  // ---------------- Watchdog Timer Setup (SRS 5.5) ----------------
+=======
   // Watchdog Timer Setup (SRS 5.5) 
+>>>>>>> origin/main
   // Catatan: signature esp_task_wdt_init() berbeda antara
   // Arduino-ESP32 core v2.x (ESP-IDF 4.x) dan core v3.x (ESP-IDF 5.x).
   // Blok di bawah menangani keduanya agar tetap compile di kedua versi.
@@ -167,13 +222,27 @@ void setup() {
   Serial.println(" detik.");
 #endif
 
+<<<<<<< HEAD
+  // ---------------- Event Logger Init (SRS 5.6, Phase 2) ----------------
+=======
   // Event Logger Init (SRS 5.6, Phase 2) 
+>>>>>>> origin/main
   // WAJIB sebelum stateMachine.begin(), karena runBoot() langsung
   // mencatat event SYSTEM_BOOT.
   eventLogger.setTimeProvider(unixTimeProvider);  // Phase 3: timestamp UNIX riil bila NTP sinkron
   eventLogger.begin();
 
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+  // Tidak butuh jaringan (murni baca NVS) -> aman diinisialisasi sebelum
+  // Wi-Fi, dan tetap berfungsi penuh walau device offline selamanya.
+  accessPolicy.begin();
+#endif
+
+  // ---------------- Network (Phase 3) ----------------
+=======
   // Network (Phase 3) 
+>>>>>>> origin/main
   // Dimulai SETELAH event logger siap, dan SEBELUM state machine agar upload
   // dapat berjalan paralel sejak awal. Jika WIFI_SSID kosong, semuanya idle
   // dan perangkat berperilaku persis seperti Phase 1/2.
@@ -181,6 +250,12 @@ void setup() {
   networkManager.begin();   // non-blocking: hanya memulai percobaan koneksi
   timeSync.begin();
   apiClient.begin();
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+  commandClient.begin();
+#endif
+=======
+>>>>>>> origin/main
   BaseType_t taskOk = xTaskCreatePinnedToCore(networkTask, "net_task", NET_TASK_STACK_BYTES,
                                               nullptr, NET_TASK_PRIORITY, nullptr, NET_TASK_CORE);
   if (taskOk != pdPASS) {
@@ -192,8 +267,18 @@ void setup() {
 
   Serial.println("[DEBUG] Perintah: 'l'=lihat log, 'c'=hapus log, 'w'=status jaringan, "
                  "'s'=sync ke backend, 'h'=uji watchdog");
+<<<<<<< HEAD
+#if ENABLE_PHASE4_FEATURES
+  Serial.println("[DEBUG] Phase 4 aktif: command jarak jauh (REMOTE_UNLOCK/ALLOW_SLOT/REVOKE_SLOT) "
+                 "di-poll otomatis tiap COMMAND_POLL_INTERVAL_MS -- tidak perlu perintah Serial tambahan, "
+                 "lihat status via 'w'.");
+#endif
+
+  // ---------------- State Machine Boot ----------------
+=======
 
   // State Machine Boot 
+>>>>>>> origin/main
   stateMachine.begin();
 }
 
